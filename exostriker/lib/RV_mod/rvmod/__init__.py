@@ -464,8 +464,10 @@ class Rvfit:
         recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[0:3] else "-fmax-stack-var-size=2147483646"        
 #        recur = "-frecursive" if "win" in sys.platform[0:3] else "-frecursive"                 
 
+        current_dir = os.getcwd()
+
         # Compile it using the Numpy F2PY
-        os.system("python{} -m numpy.f2py -c --opt=\"-O3 -std=legacy {}\" -m rvmod_for rvmod_for.f95  --build-dir bdir -I$(pwd) --backend meson".format(vers, recur))
+        os.system("python{} -m numpy.f2py -c --opt=\"-O3 -std=legacy {}\" -m rvmod_for rvmod_for.f95  --build-dir bdir -I{} --backend meson".format(vers, recur, current_dir))
 
         # If Windows, move the created DLL
         if "win" in sys.platform[0:3]:
