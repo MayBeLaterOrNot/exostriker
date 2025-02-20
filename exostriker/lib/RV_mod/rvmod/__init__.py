@@ -469,10 +469,10 @@ class Rvfit:
         
         # Compile it using the Numpy F2PY
         if "win" in sys.platform[0:3]:
-            os.system("python{} -m numpy.f2py -c --opt=\"-O3 -std=legacy {}\" -m rvmod_for rvmod_for.f95  --build-dir rvmod_for -I{}".format(vers, recur, current_dir))
+            os.system("python{} -m numpy.f2py -c --opt=\"-O3 -std=legacy {}\" -m rvmod_for rvmod_for.f95  --build-dir bdir -I{} ".format(vers, recur, current_dir))
         else:
 
-            os.system("python{} -m numpy.f2py -c --opt=\"-O3 -std=legacy {}\" -m rvmod_for rvmod_for.f95  --build-dir rvmod_for -I{} --backend meson".format(vers, recur, current_dir))
+            os.system("python{} -m numpy.f2py -c --opt=\"-O3 -std=legacy {}\" -m rvmod_for rvmod_for.f95  --build-dir bdir -I{} --backend meson".format(vers, recur, current_dir))
 
         # If Windows, move the created DLL
         if "win" in sys.platform[0:3]:
