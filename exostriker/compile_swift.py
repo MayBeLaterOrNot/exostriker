@@ -20,10 +20,11 @@ def get_python_so_filename():
     else:
         return f"swift.cpython-{python_version}-x86_64-linux-gnu.so"  # Linux/macOS filename format
 
+
 def compile_fortran(source_dir, output_lib):
     """
     Compiles Fortran files into object files and creates a static library.
-    Works on macOS, Linux, and Windows (if gfortran is installed).
+    After `libswift.a` is created, all `.o` files are deleted.
     """
     source_dir = Path(source_dir)  # Ensure source_dir is a Path object
     output_lib = Path(output_lib)  # Ensure output_lib is a Path object
@@ -83,6 +84,16 @@ def compile_fortran(source_dir, output_lib):
 
     print("Compilation successful!")
 
+    # **Remove all .o files from `source/swift_j/`**
+    for obj_file in source_dir.rglob("*.o"):
+        try:
+            obj_file.unlink()
+            print(f"Deleted: {obj_file}")
+        except Exception as e:
+            print(f"Failed to delete {obj_file}: {e}")
+
+    print("All .o files removed after successful compilation!")
+
 
 def compile_python_extension():
     """
@@ -107,97 +118,32 @@ def compile_python_extension():
     if not static_lib.exists():
         print(f"Error: The Fortran library {static_lib} was not created!")
         compile_fortran(source_directory, static_lib)
-        #sys.exit(1)
 
     # Store the original working directory
     original_dir = Path.cwd()
 
-    #print(original_dir, swift_source,static_lib, lib_swift_dir,build_dir)
-
     # **Step 3: Change directory to `lib/swift/`**
-    #os.chdir(lib_swift_dir)
-    #current_dir = Path.cwd()
+    os.chdir(lib_swift_dir)
+    current_dir = Path.cwd()
 
+    # **Use F2PY to compile the Python extension**
+    print("Using F2PY to compile Python extension...")
+    recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[:3] else "-fmax-stack-var-size=2147483646"
+    vers = f"{sys.version_info.major}.{sys.version_info.minor}"
 
-    if sys.version_info.major == 4 and sys.version_info.minor >= 14:  # junk only for tests!
-        # **Use Meson for Python 3.13+**
-        print("Using Meson to compile Python extension for Python 3.13+...")
-
-        os.system("rm %s"%build_dir)
-        # Ensure the build directory exists
-        if not build_dir.exists():
-            build_dir.mkdir(parents=True, exist_ok=True)
-
-        # Run Meson setup only if it's not already configured
-        meson_config_file = build_dir / "meson-private" / "coredata.dat"
-        if not meson_config_file.exists():
-            print("Setting up Meson for the first time...")
-            setup_cmd = ["meson", "setup", str(build_dir), str(lib_swift_dir)]
-        else:
-            print("Reconfiguring existing Meson build...")
-            setup_cmd = ["meson", "setup", "--reconfigure", str(build_dir)]
-
-        result = subprocess.run(setup_cmd, capture_output=True, text=True)
-
-        if result.returncode != 0:
-            print("Error setting up Meson:")
-            print(result.stderr)
-            sys.exit(1)
-
-        # Check if Meson actually created build.ninja
-        build_ninja_file = build_dir / "build.ninja"
-        if not build_ninja_file.exists():
-            print("Error: Meson did not generate 'build.ninja'. Check meson.build for issues.")
-            sys.exit(1)
-
-        # Compile using Ninja
-        build_cmd = ["ninja", "-C", str(build_dir)]
-        result = subprocess.run(build_cmd, capture_output=True, text=True)
-
-    elif sys.version_info.major == 3 and sys.version_info.minor >= 13:
-    
-    
-        os.chdir(lib_swift_dir)
-        current_dir = Path.cwd()
-        # **Use F2PY for Python 3.10-3.12**
-        print("Using F2PY to compile Python extension...")
-        recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[:3] else "-fmax-stack-var-size=2147483646"
-        vers = f"{sys.version_info.major}.{sys.version_info.minor}"
- 
-        if "win" in sys.platform[:3]:
-            compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m swift swift.f95 -L{current_dir} -lswift --extra-link-args="{current_dir}/libswift.lib" --build-dir bdir -I{current_dir}'           
-          
-        else:
-            compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m swift swift.f95 -L{current_dir} -lswift --extra-link-args="{current_dir}/libswift.a" --build-dir bdir -I{current_dir}'
-
-        result = subprocess.run(compile_cmd, shell=True, capture_output=True, text=True)
-        # **Step 5: Change back to the original directory after compilation**
-        os.chdir(original_dir)
- 
+    if "win" in sys.platform[:3]:
+        compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m swift swift.f95 libswift.lib --build-dir bdir -I{current_dir}'
     else:
-    
-        os.chdir(lib_swift_dir)
-        current_dir = Path.cwd()
-        # **Use F2PY for Python 3.10-3.12**
-        print("Using F2PY to compile Python extension...")
-        recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[:3] else "-fmax-stack-var-size=2147483646"
-        vers = f"{sys.version_info.major}.{sys.version_info.minor}"
+        compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m swift swift.f95 libswift.a --build-dir bdir -I{current_dir}'
 
-        if "win" in sys.platform[:3]:
-            compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m swift swift.f95 libswift.lib --build-dir bdir -I{current_dir}'
-        else:
-            compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m swift swift.f95 libswift.a --build-dir bdir -I{current_dir}'
-            
- 
+    result = subprocess.run(compile_cmd, shell=True, capture_output=True, text=True)
 
-        result = subprocess.run(compile_cmd, shell=True, capture_output=True, text=True)
-        # **Step 5: Change back to the original directory after compilation**
-        os.chdir(original_dir)
-        
+    # **Step 5: Change back to the original directory after compilation**
+    os.chdir(original_dir)
+
     if result.returncode != 0:
         print("Error compiling Python extension:", result.stderr)
         sys.exit(1)
-
 
     print(f"Python extension compiled successfully! ({expected_so_file})")
 
