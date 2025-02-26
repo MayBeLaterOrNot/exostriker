@@ -502,6 +502,61 @@ class Rvfit:
         os.chdir(old_path)
 
 
+    # Check if there is the right compiled Fortran code for the Python version
+    # If there is not, compile it
+    # This function runs automatically in every initialization of the RVMOD module
+    def check_compiled_version(self, path=None):
+        # Rename the old executables, so Python will not try to import the wrong one
+        def rename(fl_names):
+            for exec_fl in fl_names:
+                if "old_" not in exec_fl:
+                    num = 1
+                    while True:
+                        if "old_{}_".format(num) + exec_fl in os.listdir():
+                            num += 1
+                        else:
+                            os.rename(exec_fl, "old_{}_".format(num) + exec_fl)
+                            break
+
+        if path is None:
+            path = Path(__file__).parts[:-1]
+            path = Path(path[0]).joinpath(*path[1:])
+
+        # Change directory
+        old_path = os.getcwd()
+        os.chdir(path)
+
+        # Check for others executables in the path
+        execs = []
+        for names in os.listdir():
+            if "rvmod_for" in names:
+                if (".so" in names and "linux" in sys.platform) or (".so" in names and "darwin" in sys.platform) or (".pyd" in names and "win" in sys.platform[0:3]):
+                    execs.append(names)
+        # If there is no other executable, call the compile function, otherwise rename them
+        if execs is not []:
+            # Get python version and check for executables for this version
+            vers = str(sys.version_info.major) + str(sys.version_info.minor)
+            compile_flag = any(vers in exec_fl for exec_fl in execs)
+            if not compile_flag:
+                rename(execs)
+                self.f_compile()
+            else:
+                execs_true = np.array([vers in exec_fl for exec_fl in execs])
+                execs_ver = np.array(execs)[np.where(execs_true == True)[0]]
+                if all("old_" in exec_fl for exec_fl in execs_ver):
+                    ind, max_val = -1, 1
+                    for i in range(len(execs_ver)):
+                        if max_val < int(execs_ver[i][4]):
+                            max_val = int(execs_ver[i][4])
+                            ind = i
+                    os.rename(execs_ver[ind], execs_ver[ind][6:])
+                execs_ren = np.array(execs)[np.where(execs_true == False)[0]]
+                rename(execs_ren)
+        else:
+            self.f_compile()
+
+        # Return to the old directory
+        os.chdir(old_path)
     # Run the amoeba code in Fortran
     # The options for mtype defines the type of run between Keplerian and N-body
     def run_amoeba(self, mtype, auto_update=False):
