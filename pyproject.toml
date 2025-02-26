@@ -39,6 +39,7 @@ dependencies = [
     "desktop_file",
     "astropy",      
     "Pillow",
+    "ninja",
     "meson",
     "colorama",
     "pywin32 ; sys_platform == 'win32'"
