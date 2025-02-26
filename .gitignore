@@ -10,6 +10,7 @@ exostriker/exported_plots
 *.whl
 *.tar.gz
 *.so
+*.o
 
 exostriker/lib/libswift.a
 source/swift_j/libswift.a
