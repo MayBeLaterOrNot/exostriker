@@ -75,7 +75,7 @@ Python: Go to [Python Windows Releases](https://www.python.org/downloads/windows
             - Change `USERNAME` with your username and `Python311` to the actual version that you installed.
     - Go to the python folder (ex: `C:\Users\USERNAME\AppData\Local\Programs\Python\Python311`) and create a copy of the `python.exe` file in the same location with the name `python3.11.exe`
 - Gfortran: Download the *x64* version of [Winlibs](https://winlibs.com).
-    - Choose the x64 MCF **with** all the libraries;
+    - Choose the x64 POSIX **with** all the libraries;
     - After downloading, decompress the file and move the `mingw64` folder to `C:\Program Files\`;
     - Now add the folder `bin` of the `mingw64` folder to the path:
          - Use the same steps as before, but now add the line: `C:\Program Files\mingw64\bin`.
