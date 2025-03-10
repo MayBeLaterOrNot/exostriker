@@ -1,10 +1,10 @@
-[build-system]
-requires = ["setuptools<=66.0"]
-build-backend = "setuptools.build_meta"
+#[build-system]
+#requires = ["setuptools<=66.0"]
+#build-backend = "setuptools.build_meta"
 
 [project]
 name = "exostriker"
-version = "0.92.91"
+dynamic = ["version"]
 authors = [
     { name="Trifon Trifonov", email="trifonov@mpia.de" },
     { name="Matheus J. Castro", email="matheusdejesuscastro@gmail.com" },
@@ -55,3 +55,5 @@ exostriker-desktop-remove = "exostriker.desktop_entry:remove"
 "repository" = "https://github.com/3fon3fonov/exostriker"
 "Bug Tracker" = "https://github.com/3fon3fonov/exostriker/issues"
 
+[tool.setuptools.dynamic]
+version = { attr = "exostriker.__version__" }

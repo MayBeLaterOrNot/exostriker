@@ -448,7 +448,7 @@ class Rvfit:
 
    # Compile the Fortran code
     @staticmethod
-    def f_compile(path=None):
+    def f_compile(path=None, __version__="0"):
         if path is None:
             path = Path(__file__).parts[:-1]
             path = Path(path[0]).joinpath(*path[1:])
@@ -461,46 +461,40 @@ class Rvfit:
         vers = str(sys.version_info.major) + "." + str(sys.version_info.minor)
 
         # Recursive Flag only on linux
-        #recur = "" if "win" in sys.platform[0:3] else "-frecursive"
-        recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[0:3] else "-fmax-stack-var-size=2147483646"        
-#        recur = "-frecursive" if "win" in sys.platform[0:3] else "-frecursive"                 
+        # recur = "" if "win" in sys.platform[0:3] else "-frecursive"
+        # recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[0:3] else "-fmax-stack-var-size=2147483646"
+        # recur = "-frecursive" if "win" in sys.platform[0:3] else "-frecursive"
+        recur = "-fmax-stack-var-size=2147483646"
         current_dir = os.getcwd()
-      
             
-        if sys.version_info.major == 3 and sys.version_info.minor >= 13:
- 
-     
-            if "win" in sys.platform[:3]:
-                compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'           
-              
-            else:
-                compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
+        # if sys.version_info.major == 3 and sys.version_info.minor >= 13:
+        #     if "win" in sys.platform[:3]:
+        #         compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
+        #     else:
+        #         compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
+        #     result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
+        # else:
+        #     if "win" in sys.platform[:3]:
+        #         compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
+        #     else:
+        #         compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
+        #     result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
 
-            result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
- 
-                                                    
-        else:
+        compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for{__version__} rvmod_for.f95 --build-dir bdir -I{current_dir}'
+        result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
 
-            if "win" in sys.platform[:3]:
-                compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'           
-              
-            else:
-                compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
-
-            result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
- 
-
-            # If Windows, move the created DLL
-            if "win" in sys.platform[0:3]:
-                lib_path = path.joinpath("rvmod_for", ".libs")
-                fls = os.listdir(lib_path)
-                for fl in fls:
-                    os.rename(lib_path.joinpath(fl), path.joinpath(fl))
-                os.rmdir(lib_path)
-                os.rmdir(path.joinpath("rvmod_for"))
+        # If Windows, move the created DLL
+        if "win" in sys.platform[0:3]:
+            lib_path = path.joinpath("rvmod_for", ".libs")
+            fls = os.listdir(lib_path)
+            for fl in fls:
+                os.rename(lib_path.joinpath(fl), path.joinpath(fl))
+            os.rmdir(lib_path)
+            os.rmdir(path.joinpath("rvmod_for"))
 
         # Return to the old directory
         os.chdir(old_path)
+        exit()
 
 
     # Check if there is the right compiled Fortran code for the Python version
@@ -533,14 +527,24 @@ class Rvfit:
             if "rvmod_for" in names:
                 if (".so" in names and "linux" in sys.platform) or (".so" in names and "darwin" in sys.platform) or (".pyd" in names and "win" in sys.platform[0:3]):
                     execs.append(names)
+
+        # Get the exostriker version if possible
+        current_dir = os.getcwd()
+        path = Path(__file__).parts[:-5]
+        path = Path(path[0]).joinpath(*path[1:])
+        os.chdir(path)
+        from exostriker import __version__
+        __version__ = __version__.replace(".", "")
+        os.chdir(current_dir)
+
         # If there is no other executable, call the compile function, otherwise rename them
         if execs is not []:
             # Get python version and check for executables for this version
             vers = str(sys.version_info.major) + str(sys.version_info.minor)
-            compile_flag = any(vers in exec_fl for exec_fl in execs)
+            compile_flag = any(vers in exec_fl for exec_fl in execs) and any(__version__ in exec_fl for exec_fl in execs)
             if not compile_flag:
                 rename(execs)
-                self.f_compile()
+                self.f_compile(__version__=__version__)
             else:
                 execs_true = np.array([vers in exec_fl for exec_fl in execs])
                 execs_ver = np.array(execs)[np.where(execs_true == True)[0]]
@@ -554,7 +558,7 @@ class Rvfit:
                 execs_ren = np.array(execs)[np.where(execs_true == False)[0]]
                 rename(execs_ren)
         else:
-            self.f_compile()
+            self.f_compile(__version__=__version__)
 
         # Return to the old directory
         os.chdir(old_path)
