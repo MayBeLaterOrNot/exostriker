@@ -528,13 +528,16 @@ class Rvfit:
                     execs.append(names)
 
         # Get the exostriker version if possible
-        current_dir = os.getcwd()
-        path = Path(__file__).parts[:-5]
-        path = Path(path[0]).joinpath(*path[1:])
-        os.chdir(path)
-        from exostriker import __version__
-        __version__ = __version__.replace(".", "")
-        os.chdir(current_dir)
+        try:
+            current_dir = os.getcwd()
+            path = Path(__file__).parts[:-5]
+            path = Path(path[0]).joinpath(*path[1:])
+            os.chdir(path)
+            from exostriker import __version__
+            __version__ = __version__.replace(".", "")
+            os.chdir(current_dir)
+        except (ModuleNotFoundError, IndexError):
+            __version__ = "0000"
 
         # If there is no other executable, call the compile function, otherwise rename them
         if execs is not []:
