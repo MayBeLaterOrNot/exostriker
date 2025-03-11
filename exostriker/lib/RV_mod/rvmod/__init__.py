@@ -460,6 +460,12 @@ class Rvfit:
         # Get the actual Python version
         vers = str(sys.version_info.major) + "." + str(sys.version_info.minor)
 
+        # Verify if python[version] command exists
+        see_python = f'python{vers}'
+        result = subprocess.run(see_python, shell=True, capture_output=True, text=True)
+        if "command not found" in result.stderr or "is not recognized" in result.stderr:
+            vers = ""
+
         # Recursive Flag only on linux
         # recur = "" if "win" in sys.platform[0:3] else "-frecursive"
         # recur = "-fmax-stack-var-size=2147483646" if "win" in sys.platform[0:3] else "-fmax-stack-var-size=2147483646"
@@ -480,21 +486,21 @@ class Rvfit:
         #         compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for rvmod_for.f95 --build-dir bdir -I{current_dir}'
         #     result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
 
-        compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for{__version__} rvmod_for.f95 --build-dir bdir -I{current_dir}'
-        result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout, stderr=sys.stderr)
+        compile_cmd = f'python{vers} -m numpy.f2py -c --opt="-O3 -std=legacy {recur}" -m rvmod_for{__version__} rvmod_for.f95 -I{current_dir}'
+        result = subprocess.run(compile_cmd, shell=True, capture_output=False, text=True, stdout=sys.stdout,
+                                stderr=sys.stderr)
 
         # If Windows, move the created DLL
-        if "win" in sys.platform[0:3]:
-            lib_path = path.joinpath("rvmod_for", ".libs")
-            fls = os.listdir(lib_path)
-            for fl in fls:
-                os.rename(lib_path.joinpath(fl), path.joinpath(fl))
-            os.rmdir(lib_path)
-            os.rmdir(path.joinpath("rvmod_for"))
+        # if "win" in sys.platform[0:3]:
+        #     lib_path = path.joinpath("rvmod_for", ".libs")
+        #     fls = os.listdir(lib_path)
+        #     for fl in fls:
+        #         os.rename(lib_path.joinpath(fl), path.joinpath(fl))
+        #     os.rmdir(lib_path)
+        #     os.rmdir(path.joinpath("rvmod_for"))
 
         # Return to the old directory
         os.chdir(old_path)
-
 
     # Check if there is the right compiled Fortran code for the Python version
     # If there is not, compile it
