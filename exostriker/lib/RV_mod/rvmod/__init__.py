@@ -494,7 +494,6 @@ class Rvfit:
 
         # Return to the old directory
         os.chdir(old_path)
-        exit()
 
 
     # Check if there is the right compiled Fortran code for the Python version
@@ -562,6 +561,9 @@ class Rvfit:
 
         # Return to the old directory
         os.chdir(old_path)
+
+        return __version__
+
     # Run the amoeba code in Fortran
     # The options for mtype defines the type of run between Keplerian and N-body
     def run_amoeba(self, mtype, auto_update=False):
@@ -787,7 +789,8 @@ class Rvfit:
 # If it is not the main calling, check for compiled versions and import the Fortran
 if __name__ != '__main__':
     re = Rvfit()
-    re.check_compiled_version()
+    exo_ver = re.check_compiled_version()
     del re
 
-    from . import rvmod_for
+    import importlib
+    rvmod_for = importlib.import_module(".rvmod_for" + exo_ver, package=__package__)
