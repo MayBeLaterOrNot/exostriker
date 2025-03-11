@@ -83,7 +83,7 @@ do not have the **python3.1X-dev** so you make sure you have it, in case the Exo
 does not want to compile!
 
 
-**See README_install.md** for further instructions.
+**See [README_install.md](README_install.md)** for further instructions.
 
 
 
@@ -95,7 +95,7 @@ $ exostriker (in case of system-wide install, see above)
 
 * or just do:
 
-$ python3.11 -m exostriker (inside of the git clone directory, see above, and also README_for_installation.md)
+$ python3.11 -m exostriker (inside of the git clone directory, see above, and also [README_install.md](README_install.md))
  
 
 
