@@ -38,16 +38,18 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
     
     integer, allocatable, dimension(:) :: ts
     real(8), allocatable, dimension(:) :: x, y, sig, y_in, ymod
+    real(8), allocatable, dimension(:,:) :: ymod_pl,ymod_pl2
     
+        
 !    real(8) :: y(20000), sig(20000), y_in(20000)
-    real(8) :: a(MMAX), covar(MMAX, MMAX)
+    real(8) :: a(MMAX), covar(MMAX, MMAX), alpha(MMAX, MMAX)
     real(8) :: rms, mass(NPLMAX), ap(NPLMAX)
     real(8) :: j_mass(NPLMAX), chisq
     real(8) :: x0, incl(NPLMAX), cap0m(NPLMAX)
     real(8) :: dt, t_max, loglik, dy, sig2i
     real(8) :: epoch, ftol, jitt(NDSMAX)
     real(8) :: dyda(MMAX), p(MMAX + 1, MMAX), yamoeba(MMAX + 1)
-    real(8) :: ymod_pl(npl_in,ndata),ymod_pl2(npl_in,nt) 
+!    real(8) :: ymod_pl(npl_in,ndata),ymod_pl2(npl_in,nt) 
     real(8) :: loglikk, ologlikk, dloglikk, best_w, best_we
 
 !    character(80) version_input, version
@@ -71,7 +73,12 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
     
 
     external rvkep_kepamo, compute_abs_loglik_kep
-
+    common /DSBLK/ npl, ndset, idsmax, idset, gr_flag
+    
+    allocate(x(20000),y(20000),sig(20000),y_in(20000),ts(20000),ymod(20000))
+!    allocate( t_stop,t_init)
+    allocate(ymod_pl(npl_in,20000), ymod_pl2(npl_in,20000)) 
+ 
 !f2py intent(in) ndset_in, npl_in, ndata
 !f2py intent(in) dynamical_planets
 !f2py intent(out) res_array, fit_return, fit_array
@@ -81,11 +88,8 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
 !f2py depend(ndata) data_array
 !f2py depend(dt) fit_array
 
-    common /DSBLK/ npl, ndset, idsmax, idset, gr_flag
     
-    allocate(x(20000),y(20000),sig(20000),y_in(20000),ts(20000),ymod(20000))
-!    allocate( t_stop,t_init)
-    
+        
     t_stop = 0
     t_init = 0
     gr_flag = gr_flag_in
@@ -206,6 +210,7 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
             !if (a(j+6)>2.d0*PI) a(j+6) = dmod(a(j+6), 2.d0*PI )
         enddo
     else
+!        write(*,*) "TEST", hkl
         do i = 1, npl
             j = 6 * (i - 1)
             if (a(j + 1)<0.d0) then  !if K<0, set K>0 and w = w+PI
@@ -216,8 +221,8 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
 
             if (a(j + 5)<0.d0) a(j + 5) = dmod(a(j + 5) + 2.d0 * PI, 2.d0 * PI)
             if (a(j + 5)>2.d0 * PI) a(j + 5) = dmod(a(j + 5), 2.d0 * PI)
-            if (a(j + 6)<0.d0) a(j + 6) = dmod(a(j + 6) + 2.d0 * PI, 2.d0 * PI)
-            if (a(j + 6)>2.d0 * PI) a(j + 6) = dmod(a(j + 6), 2.d0 * PI)
+            !if (a(j + 6)<0.d0) a(j + 6) = dmod(a(j + 6) + 2.d0 * PI, 2.d0 * PI)
+            !if (a(j + 6)>2.d0 * PI) a(j + 6) = dmod(a(j + 6), 2.d0 * PI)
         enddo
     endif
  
@@ -233,7 +238,7 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
         idset = ts(i)
  
         call RVKEP_kepamo (x(i), a, ymod(i), ymod_pl(:,i), dyda, ma, idset, hkl)
-
+!        write(*,*), ymod(i), ymod_pl(:,i), hkl
         y_in(i) = y(i) - a(6 * npl + idset) - a(6 * npl + 2 * ndset + 1) * x(i) - &
                 a(6 * npl + 2 * ndset + 2) * x(i)**2
         ymod(i) = ymod(i) - a(6 * npl + idset)&
@@ -317,13 +322,15 @@ subroutine kepfit_amoeba(epsil, deltat, amoebastarts, &
                 a(6 * npl + j) = 0.0
             enddo
             call RVKEP_kepamo (x(i), a, ymod(i), ymod_pl2(:,i), dyda, ma, 1, hkl)
-!            write(*,*)(ymod_pl(j,i),j=1,npl) 
+            !write(*,*) npl
             fit_array(i, :) = (/ x0 + x(i), ymod(i), (ymod_pl2(j,i),j=1,npl) /)
         enddo
     endif
 end
 
-
+!            call RVKEP_keplm (x(i), a, ymod(i), ymod_pl(:,i), dyda, ma, 1, hkl)
+!            write(*,*)(ymod_pl(j,i),j=1,npl) 
+!            fit_array(i, :) = (/ x0 + x(i), ymod(i), (ymod_pl(j,i),j=1,npl) /)
 
 
 
@@ -1266,6 +1273,8 @@ subroutine io_read_data(ndata, t, ts, ys, sigs, jitt, epoch, t0, t_max, &
     return   
 end
 
+
+ 
 subroutine RVKEP_kepamo (x, a, y, y_pl, dyda, ma, ts, hkl)
     implicit none
     real(8) :: PI, TWOPI
@@ -1274,12 +1283,11 @@ subroutine RVKEP_kepamo (x, a, y, y_pl, dyda, ma, ts, hkl)
     integer :: npl, ndset, idset, ma, i, j, NDSMAX, ts, hkl, gr_flag
     parameter (NDSMAX = 20)
     integer :: idsmax(NDSMAX)
-    real(8) :: x, y, a(ma), a2(ma), dyda(ma), mass(10), ap(10)
+    real(8) :: x, y, a(ma), a2(ma), dyda(ma), mass(10), ap(10),y_pl(10)
     real(8) :: cosw, sinw, capm, cape, cose, sine, cosf, sinf, fac1, fac2, fac3
     real(8) :: orbel_ehybrid, omega(10), capmm(10), ecc(10)
     real(8) :: wm, sinwm, coswm, sin2wm, cos2wm
     real(8) :: sin3wm, cos3wm, omegad(10)
-    real(8) :: y_pl(npl)
 
     common /DSBLK/ npl, ndset, idsmax, idset, gr_flag
 
@@ -1322,10 +1330,10 @@ subroutine RVKEP_kepamo (x, a, y, y_pl, dyda, ma, ts, hkl)
             omega(i) = a2(j + 4)
             capmm(i) = a2(j + 5)
 
-            if(gr_flag.ne.0) call MA_J_kepamo (a, ma, npl, 1.0d0, &
+            if(gr_flag.ne.0) call MA_J_kepamo (a2, ma, npl, 1.0d0, &
                     mass, ap, hkl, gr_flag)
 
-            omegad(i) = a(j + 6)
+            omegad(i) = a2(j + 6)
         enddo
     else
         do i = 1, npl
@@ -1349,9 +1357,9 @@ subroutine RVKEP_kepamo (x, a, y, y_pl, dyda, ma, ts, hkl)
             if(capmm(i)<0.d0)capmm(i) = dmod(capmm(i) + 2.d0 * PI, 2.d0 * PI)
             if(capmm(i)>0.d0)capmm(i) = dmod(capmm(i), 2.d0 * PI)
 
-            if(gr_flag.ne.0) call MA_J_kepamo (a, ma, npl, 1.0d0, &
+            if(gr_flag.ne.0) call MA_J_kepamo (a2, ma, npl, 1.0d0, &
                     mass, ap, hkl, gr_flag)            
-            omegad(i) = a(j + 6)
+            omegad(i) = a2(j + 6)
         enddo
     endif
 
@@ -1392,8 +1400,8 @@ subroutine RVKEP_kepamo (x, a, y, y_pl, dyda, ma, ts, hkl)
             i = 6 * (j - 1)
             !ecc2 = dsqrt(a2(3+i)**2 + a2(4+i)**2)
             if (ecc(j)>1.d-2) then
-                cosw = dcos(omega(j) + omegad(i) * x / 365.25d0)
-                sinw = dsin(omega(j) + omegad(i) * x / 365.25d0)
+                cosw = dcos(omega(j) + omegad(j) * x / 365.25d0)
+                sinw = dsin(omega(j) + omegad(j) * x / 365.25d0)
 
                 capm = TWOPI * x / a2(2 + i) + capmm(j)
                 capm = dmod(capm, 2.d0 * PI)
@@ -1464,13 +1472,21 @@ subroutine RVKEP_kepamo (x, a, y, y_pl, dyda, ma, ts, hkl)
     y = y + a2(6 * npl + ts)
     dyda(6 * npl + ts) = 1.d0
 
-    y = y + a2(6 * npl + 2 * ndset + 1) * x
-    y = y + a2(6 * npl + 2 * ndset + 2) + a2(6 * npl + 2 * ndset + 2) * x**2
+!    y = y + a2(6 * npl + 2 * ndset + 1) * x
+!    y = y + a2(6 * npl + 2 * ndset + 2) + a2(6 * npl + 2 * ndset + 2) * x**2
+
+    y = y + a2(6 * npl + 2 * ndset + 1) *x + a2(6 * npl + 2 * ndset + 2) * x**2
+
+    dyda(6 * npl + ndset + 1) = x
+    dyda(6 * npl + ndset + 2) = x**2
+    !write(*,*), y, hkl
 
     do i = ts + 1, ndset
         dyda(6 * npl + i) = 0.d0
     enddo
-
+    
+ 
+ 
     return
 end
 
@@ -2486,8 +2502,8 @@ subroutine RVKEP_keplm (x, a, y, y_pl, dyda, ma, ts, hkl)
             i = 6 * (j - 1)
 
             if (ecc(j)>1.d-2) then
-                cosw = dcos(omega(j))
-                sinw = dsin(omega(j))
+                cosw = dcos(omega(j) + omegad(j) * x / 365.25d0)
+                sinw = dsin(omega(j) + omegad(j) * x / 365.25d0)
 
                 capm = TWOPI * x / a(2 + i) + capmm(j)
                 capm = dmod(capm, 2.d0 * PI)
