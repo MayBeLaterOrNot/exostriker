@@ -20,6 +20,8 @@ In order to compile the Fortran code of Exostriker when using Anaconda, install 
 conda install conda-forge::gfortran
 ```
 
+Obs: this installation needs to be done with the exostriker environment acitvated.
+
 # Instalation
 
 There are many options to run Exo-Striker. One may try an Anaconda environment, install it from pip, or run directly the source code from the repository.  
