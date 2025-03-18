@@ -461,7 +461,7 @@ class Rvfit:
         vers = str(sys.version_info.major) + "." + str(sys.version_info.minor)
 
         # Verify if python[version] command exists
-        see_python = f'python{vers}'
+        see_python = f'python{vers} --version'
         result = subprocess.run(see_python, shell=True, capture_output=True, text=True)
         if "command not found" in result.stderr or "is not recognized" in result.stderr:
             vers = ""
