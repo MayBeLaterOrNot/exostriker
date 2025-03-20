@@ -2133,14 +2133,14 @@ subroutine io_write_bf_ewcop_fin_dynamo (a, covar, t, ys, &
 !            write(*,*)"incl1", dmod(a(i + 6) * 180.d0 / PI, 180.d0)
             bestpar_1(j, :, 1) = (/ a(i + 1), a(i + 2) / 8.64d4, a(i + 3), &
                     best_w, a(i + 5) * 180.d0 / PI, &
-                    dmod(a(i + 6) * 180.d0 / PI, 180.d0), &
+                    dmod(a(i + 6) * 180.d0 / PI, 360.d0), &
                     dmod(a(i + 7) * 180.d0 / PI, 360.d0), wdot(i), &
                     0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0 /)
             bestpar_1(j, :, 2) = (/ dsqrt(covar(i + 1, i + 1)), &
                     dsqrt(covar(i + 2, i + 2)), &
                     dsqrt(covar(i + 3, i + 3)), best_we, &
-                    dsqrt(covar(i + 5, i + 5)) * 180.d0 / PI, &
-                    dmod(dsqrt(covar(i + 6, i + 6)) * 180.d0 / PI, 180.d0), &
+                    dsqrt(covar(i + 5, i + 5)) * 360.d0 / PI, &
+                    dmod(dsqrt(covar(i + 6, i + 6)) * 180.d0 / PI, 360.d0), &
                     dmod(dsqrt(covar(i + 7, i + 7)) * 180.d0 / PI, 360.d0), &
                     u_wdot(i), &
                     0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0 /)
@@ -2329,14 +2329,14 @@ subroutine io_write_bf_ewcop_fin_dynlm (a, covar, t, ys, ndata, ts, &
 
             bestpar_1(j, :, 1) = (/ a(i + 1), a(i + 2) / 8.64d4, a(i + 3), &
                     best_w, a(i + 5) * 180.d0 / PI, &
-                    dmod(a(i + 6) * 180.d0 / PI, 180.d0), &
+                    dmod(a(i + 6) * 180.d0 / PI, 360.d0), &
                     dmod(a(i + 7) * 180.d0 / PI, 360.d0), wdot(i), &
                     0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0 /)
             bestpar_1(j, :, 2) = (/ dsqrt(covar(i + 1, i + 1)), &
                     dsqrt(covar(i + 2, i + 2)) / 8.64d4, &
                     dsqrt(covar(i + 3, i + 3)), best_we, &
                     dsqrt(covar(i + 5, i + 5)) * 180.d0 / PI, &
-                    dmod(dsqrt(covar(i + 6, i + 6)) * 180.d0 / PI, 180.d0), &
+                    dmod(dsqrt(covar(i + 6, i + 6)) * 180.d0 / PI, 360.d0), &
                     dmod(dsqrt(covar(i + 7, i + 7)) * 180.d0 / PI, 360.d0), &
                     u_wdot(i), &
                     0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0, 0.d0 /)

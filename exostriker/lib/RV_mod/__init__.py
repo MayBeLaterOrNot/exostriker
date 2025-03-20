@@ -454,8 +454,15 @@ def ttvs_mod(par,vel_files,npl, stellar_mass, times, planet_N, hkl, fit_results=
             ecc_ = np.sqrt(par[len(vel_files)*2 +7*i+2]**2 + par[len(vel_files)*2 +7*i+3]**2)
             om_  = np.degrees(np.arctan2(par[len(vel_files)*2 +7*i+2],par[len(vel_files)*2 +7*i+3]))%360
             Ma_  = (par[len(vel_files)*2 +7*i+4] - om_)%360.0
+            
+            #om_  = (om_+180.0)%360.0
+            #Ma_  = (Ma_-180.0)%360.0 
+                       
         else:
             ecc_, om_, Ma_ = par[len(vel_files)*2 +7*i+2], par[len(vel_files)*2 +7*i+3], par[len(vel_files)*2 +7*i+4]        
+ 
+            #om_  = (om_+180.0)%360.0
+            #Ma_  = (Ma_-180.0)%360.0  
        
         if fit_results == False:
             pl_mass,ap = mass_a_from_Kepler_fit([par[len(vel_files)*2 + 7*i],
@@ -471,9 +478,9 @@ def ttvs_mod(par,vel_files,npl, stellar_mass, times, planet_N, hkl, fit_results=
                                             par[len(vel_files)*2 +7*i+5],
                                             par[len(vel_files)*2 +7*i+6] ,
                                             #par[len(vel_files)*2 +7*i+3]%360.0,
-                                            (om_+180.0)%360.0,
+                                            om_,
                                             #par[len(vel_files)*2 +7*i+4]%360.0]
-                                            (Ma_-180.0)%360.0]
+                                            Ma_]
 
         planet = ttvfast.models.Planet(*pl_params)
         planets.append(planet)
@@ -521,7 +528,7 @@ def ast_loglik(par,vel_files, ast_files,npl,stellar_mass, times, hkl, fit_result
 
         t0 = transit_tperi(par[len(vel_files)*2 +7*i+1],ecc_, om_, Ma_ ,times[0])[0] #%par[len(vel_files)*2 +7*i+1] 
 
-        om_ = (om_ -180.0)%360.0
+        om_ = (om_ - 180.0)%360.0
         Ma_ = (Ma_ + 180.0)%360.0
     
         #t0    = times[0]  - ((np.radians(Ma_)/2.0*np.pi)*par[len(vel_files)*2 + 7*i])
@@ -703,11 +710,18 @@ def ttvs_loglik(par,vel_files,ttv_files,npl,stellar_mass,times, hkl, fit_results
             ecc_ = np.sqrt(par[len(vel_files)*2 +7*i+2]**2 + par[len(vel_files)*2 +7*i+3]**2)
             om_  = np.degrees(np.arctan2(par[len(vel_files)*2 +7*i+2],par[len(vel_files)*2 +7*i+3]))%360
             Ma_  = (par[len(vel_files)*2 +7*i+4] - om_)%360.0
+            
+           # om_ = (om_+180.0)%360.0
+           # Ma_ = (Ma_-180.0)%360.0            
+            
             # reject e > 0 
             if ecc_ >= 1.0: 
                 return -np.inf  
         else:
             ecc_, om_, Ma_ = par[len(vel_files)*2 +7*i+2], par[len(vel_files)*2 +7*i+3], par[len(vel_files)*2 +7*i+4]         
+
+            #om_ = (om_+180.0)%360.0
+            #Ma_ = (Ma_-180.0)%360.0           
         
         if fit_results == False:
             pl_mass,ap = mass_a_from_Kepler_fit([par[len(vel_files)*2 + 7*i],
@@ -723,13 +737,18 @@ def ttvs_loglik(par,vel_files,ttv_files,npl,stellar_mass,times, hkl, fit_results
                                             ecc_,
                                             par[len(vel_files)*2 +7*i+5],
                                             par[len(vel_files)*2 +7*i+6],
-                                            (om_+180.0)%360.0,
-                                            (Ma_-180.0)%360.0]
+                                            om_,
+                                            Ma_]
         planet = ttvfast.models.Planet(*pl_params)
         planets.append(planet)
 
-    results = ttvfast.ttvfast(planets, stellar_mass, times[0],times[1],times[2],input_flag=0)
+    #rv_times  = list(np.linspace(times[0],times[2], 1000)) rv_times=rv_times,
+ 
+    results = ttvfast.ttvfast(planets, stellar_mass, times[0],times[1],times[2], input_flag=0)
     result_rows = list(zip(*results['positions']))
+    #result_rows_rv = list(results['rv'])
+ 
+
 
     n1   = [item[0] for item in result_rows]
 
@@ -2027,9 +2046,9 @@ def return_results(obj, pp, ee, par,flags, npl,vel_files, tr_files, tr_model, tr
             obj.e_cosw_err[i]  = e_par[len(vel_files)*2 + 7*i+3]
             obj.lamb_err[i]    = e_par[len(vel_files)*2 + 7*i+4]
 
-            obj.e_err[i]   = 0 #np.sqrt(obj.e_sinw[i]**2 + obj.e_cosw[i]**2)
-            obj.w_err[i]   = 0 # np.degrees(np.arctan2(np.radians(obj.e_sinw[i]),np.radians(obj.e_cosw[i])))
-            obj.M0_err[i]  = 0 #(obj.lamb[i] - obj.w[i])%360.0
+            obj.e_err[i]   = np.array([0.0,0.0]) #.sqrt(obj.e_sinw[i]**2 + obj.e_cosw[i]**2)
+            obj.w_err[i]   = np.array([0.0,0.0])   # np.degrees(np.arctan2(np.radians(obj.e_sinw[i]),np.radians(obj.e_cosw[i])))
+            obj.M0_err[i]  = np.array([0.0,0.0])   #(obj.lamb[i] - obj.w[i])%360.0
 
         else:
 
@@ -2037,9 +2056,9 @@ def return_results(obj, pp, ee, par,flags, npl,vel_files, tr_files, tr_model, tr
             obj.w_err[i] = e_par[len(vel_files)*2 + 7*i+3]
             obj.M0_err[i] = e_par[len(vel_files)*2 + 7*i+4]
 
-            obj.e_sinw_err[i] = 0 #obj.e[i]*np.sin(np.radians(obj.w[i]))
-            obj.e_cosw_err[i] = 0 #obj.e[i]*np.cos(np.radians(obj.w[i]))
-            obj.lamb_err[i]   = 0 #(obj.w[i] + obj.M0[i])%360.0
+            obj.e_sinw_err[i] = np.array([0.0,0.0]) #obj.e[i]*np.sin(np.radians(obj.w[i]))
+            obj.e_cosw_err[i] = np.array([0.0,0.0])  #obj.e[i]*np.cos(np.radians(obj.w[i]))
+            obj.lamb_err[i]   = np.array([0.0,0.0])  #(obj.w[i] + obj.M0[i])%360.0
 
 
 
