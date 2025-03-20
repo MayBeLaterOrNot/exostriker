@@ -4,6 +4,10 @@
 <p align="center">
   <img width="400" src="./exostriker/source/png/33_striker.png">
 </p>
+
+[![Read the Docs](https://img.shields.io/readthedocs/exostriker?logo=readthedocs)](https://exostriker.readthedocs.io/)
+[![PyPI - Version](https://img.shields.io/pypi/v/exostriker?logo=pypi)](https://pypi.org/project/exostriker/)
+[![GitHub Release](https://img.shields.io/github/v/tag/3fon3fonov/exostriker?logo=github)](https://github.com/3fon3fonov/exostriker)
  
 The Exo-Striker analyzes exoplanet orbitals, performs N-body simulations, and models the RV stellar reflex motion caused by dynamically interacting planets in multi-planetary systems. It offers a broad range of tools for detailed analysis of transit and Doppler data, including power spectrum analysis for Doppler and transit data; Keplerian and dynamical modeling of multi-planet systems; MCMC and nested sampling; Gaussian Processes modeling; and a long-term stability check of multi-planet systems. The Exo-Striker can also perform Mean Motion Resonance (MMR) analysis, create fast fully interactive plots, and export ready-to-use LaTeX tables with best-fit parameters, errors, and statistics. It combines Fortran efficiency and Python flexibility and is cross-platform compatible (MAC OS, Linux, Windows). 
 
@@ -83,7 +87,7 @@ do not have the **python3.1X-dev** so you make sure you have it, in case the Exo
 does not want to compile!
 
 
-**See README_install.md** for further instructions.
+**See [README_install.md](README_install.md)** for further instructions.
 
 
 
@@ -95,7 +99,7 @@ $ exostriker (in case of system-wide install, see above)
 
 * or just do:
 
-$ python3.11 -m exostriker (inside of the git clone directory, see above, and also README_for_installation.md)
+$ python3.11 -m exostriker (inside of the git clone directory, see above, and also [README_install.md](README_install.md))
  
 
 

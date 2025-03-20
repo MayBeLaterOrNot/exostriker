@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-__author__ = 'Trifon Trifonov'
+
+from exostriker import __version__
 
 import time 
 from pathos.multiprocessing import freeze_support
@@ -12619,7 +12620,7 @@ Please install via 'pip install ttvfast'.
         global fit 
         super().__init__()
     
-        self.es_version = "0.92"
+        self.es_version = __version__
 
         #self.loading_screen= LoadingScreen()   
  
