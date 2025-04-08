@@ -50,17 +50,22 @@ def check_for_missing_instances(fit,fit_new):
     #fit.mass_semimajor = dill.copy(fit.mass_semimajor)
 
 
-    if len(np.atleast_1d(fit_new.ns_sampler))!=0:
-        try:
-            fit_new.ns_sampler.lbf = dill.copy(fit_new.ns_sampler.lbf)
-        except:
-            pass
-
-    if len(np.atleast_1d(fit_new.mcmc_sampler))!=0:
-        try:
-            fit_new.mcmc_sampler.lbf = dill.copy(fit_new.mcmc_sampler.lbf)
-        except:
-            pass
+    try:
+        if len(np.atleast_1d(fit_new.ns_sampler))!=0:
+            try:
+                fit_new.ns_sampler.lbf = dill.copy(fit_new.ns_sampler.lbf)
+            except:
+                pass
+     
+        if len(np.atleast_1d(fit_new.mcmc_sampler))!=0:
+            try:
+                fit_new.mcmc_sampler.lbf = dill.copy(fit_new.mcmc_sampler.lbf)
+            except:
+                pass
+    except Exception as e:
+        print("Warning: Could not load nested/mcmc sampler:", e)
+        fit_new.ns_sampler = []
+        fit_new.mcmc_sampler = []
 
     if len(fit_new.type_fit) != 4:
         try:

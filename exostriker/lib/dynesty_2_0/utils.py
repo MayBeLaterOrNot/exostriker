@@ -49,6 +49,8 @@ IteratorResultShort = namedtuple('IteratorResultShort', [
     'bounditer', 'eff'
 ])
 
+_LOWL_VAL = -1e300
+
 
 class LoglOutput:
     """
@@ -61,7 +63,7 @@ class LoglOutput:
     def __init__(self, v, blob_flag):
         """
         Initialize the object
-        
+
         Parameters
         ----------
         v: float or tuple
@@ -310,16 +312,16 @@ class DelayTimer:
     """ Utility class that allows us to detect a certain
     time has passed"""
 
-    def __init__(self, dt):
+    def __init__(self, delay):
         """ Initialise the time with delay of dt seconds
 
         Parameters
         ----------
 
-        dt: float
+        delay: float
             The number of seconds in the timer
         """
-        self.dt = dt
+        self.delay = delay
         self.last_time = time.time()
 
     def is_time(self):
@@ -334,7 +336,7 @@ class DelayTimer:
              initialization or last successful is_time() call
         """
         curt = time.time()
-        if curt - self.last_time > self.dt:
+        if curt - self.last_time > self.delay:
             self.last_time = curt
             return True
         return False
@@ -1609,6 +1611,10 @@ def unravel_run(res, print_progress=True):
     except AttributeError:
         pass
 
+    if (np.diff(res.logl) == 0).sum() == 0:
+        warnings.warn('The likelihood seem to have plateaus. '
+                      'The unraveling such runs may be inaccurate')
+
     # Recreate the nested sampling run for each strand.
     new_res = []
     nstrands = len(np.unique(idxs))
@@ -1773,14 +1779,13 @@ def check_result_static(res):
     standard_run = False
 
     # Check if we have a constant number of live points.
-    nlive_test = np.ones(niter, dtype=int) * nlive
-    if np.all(samples_n == nlive_test):
+    if samples_n.size == niter and np.all(samples_n == nlive):
         standard_run = True
 
     # Check if we have a constant number of live points where we have
     # recycled the final set of live points.
     nlive_test = np.minimum(np.arange(niter, 0, -1), nlive)
-    if np.all(samples_n == nlive_test):
+    if samples_n.size == niter and np.all(samples_n == nlive_test):
         standard_run = True
     # If the number of live points is consistent with a standard nested
     # sampling run, slightly modify the format to keep with previous usage.
@@ -1788,8 +1793,6 @@ def check_result_static(res):
         resdict = res.asdict()
         resdict['nlive'] = nlive
         resdict['niter'] = niter - nlive
-        # XXX TODO Is it correct to subtract nlive here ?
-        # That will make things inconsistent
         res = Results(resdict)
     return res
 
@@ -1862,6 +1865,50 @@ def kld_error(res,
         return kld
 
 
+def _prepare_for_merge(res):
+    """
+    Internal method used to prepare a run for merging with another run.
+    It takes the results object and it returns the dictionary with basic run
+    info and the number of live points at each iteration.
+    """
+    # Initialize the first ("base") run.
+    run_info = dict(id=res.samples_id,
+                    u=res.samples_u,
+                    v=res.samples,
+                    logl=res.logl,
+                    nc=res.ncall,
+                    it=res.samples_it,
+                    blob=res.blob)
+    nrun = len(run_info['id'])
+
+    # Number of live points throughout the run.
+    if res.isdynamic():
+        run_nlive = res.samples_n
+    else:
+        niter, nlive = res.niter, res.nlive
+        if nrun == niter:
+            run_nlive = np.ones(niter, dtype=int) * nlive
+        elif nrun == (niter + nlive):
+            # this is the case where the last live points are added
+            # one by one in the end of the run
+            run_nlive = np.minimum(np.arange(nrun, 0, -1), nlive)
+        else:
+            raise ValueError("Final number of samples differs from number of "
+                             "iterations and number of live points in `res1`.")
+
+    # Batch information (if available).
+    # note we also check for existance of batch_bounds
+    # because unravel_run makes 'static' runs of 1 livepoint
+    # but some will have bounds
+    if res.isdynamic() or 'batch_bounds' in res.keys():
+        run_info['batch'] = res.samples_batch
+        run_info['bounds'] = res.batch_bounds
+    else:
+        run_info['batch'] = np.zeros(nrun, dtype=int)
+        run_info['bounds'] = np.array([(-np.inf, np.inf)])
+    return run_nlive, run_info
+
+
 def _merge_two(res1, res2, compute_aux=False):
     """
     Internal method used to merges two runs with differing (possibly variable)
@@ -1888,172 +1935,132 @@ def _merge_two(res1, res2, compute_aux=False):
         nested sampling run.
 
     """
+    base_nlive, base_info = _prepare_for_merge(res1)
+    new_nlive, new_info = _prepare_for_merge(res2)
+    base_nsamples = len(base_info['id'])
+    new_nsamples = len(new_info['id'])
+    # Initialize our new combined run.
+    combined_info = dict()
+    for curk in [
+            'id', 'u', 'v', 'logl', 'logvol', 'logwt', 'logz', 'logzvar', 'h',
+            'nc', 'it', 'n', 'batch', 'blob'
+    ]:
+        combined_info[curk] = []
 
-    # Initialize the first ("base") run.
-    base_info = dict(id=res1.samples_id,
-                     u=res1.samples_u,
-                     v=res1.samples,
-                     logl=res1.logl,
-                     nc=res1.ncall,
-                     it=res1.samples_it,
-                     blob=res1.blob)
-    nbase = len(base_info['id'])
+    # These are merged batch bounds
+    combined_bounds = np.unique(np.concatenate(
+        (base_info['bounds'], new_info['bounds'])),
+                                axis=0)
+    # Here we try to find where the new bounds are in the combined bounds
+    new_bound_map = {}
+    base_bound_map = {}
+    for i in range(len(new_info['bounds'])):
+        new_bound_map[i] = np.where(
+            np.all(new_info['bounds'][i] == combined_bounds, axis=1))[0][0]
+    for i in range(len(base_info['bounds'])):
+        base_bound_map[i] = np.where(
+            np.all(base_info['bounds'][i] == combined_bounds, axis=1))[0][0]
 
-    # Number of live points throughout the run.
-    if res1.isdynamic():
-        base_n = res1.samples_n
-    else:
-        niter, nlive = res1.niter, res1.nlive
-        if nbase == niter:
-            base_n = np.ones(niter, dtype=int) * nlive
-        elif nbase == (niter + nlive):
-            base_n = np.minimum(np.arange(nbase, 0, -1), nlive)
-        else:
-            raise ValueError("Final number of samples differs from number of "
-                             "iterations and number of live points in `res1`.")
-
-    # Batch information (if available).
-    # note we also check for existance of batch_bounds
-    # because unravel_run makes 'static' runs of 1 livepoint
-    # but some will have bounds
-    if res1.isdynamic() or 'batch_bounds' in res1.keys():
-        base_info['batch'] = res1.samples_batch
-        base_info['bounds'] = res1.batch_bounds
-    else:
-        base_info['batch'] = np.zeros(nbase, dtype=int)
-        base_info['bounds'] = np.array([(-np.inf, np.inf)])
-
-    # Initialize the second ("new") run.
-    new_info = dict(id=res2.samples_id,
-                    u=res2.samples_u,
-                    v=res2.samples,
-                    logl=res2.logl,
-                    nc=res2.ncall,
-                    it=res2.samples_it,
-                    blob=res2.blob)
-    nnew = len(new_info['id'])
-
-    # Number of live points throughout the run.
-    if res2.isdynamic():
-        new_n = res2.samples_n
-    else:
-        niter, nlive = res2.niter, res2.nlive
-        if nnew == niter:
-            new_n = np.ones(niter, dtype=int) * nlive
-        elif nnew == (niter + nlive):
-            new_n = np.minimum(np.arange(nnew, 0, -1), nlive)
-        else:
-            raise ValueError("Final number of samples differs from number of "
-                             "iterations and number of live points in `res2`.")
-
-    # Batch information (if available).
-    # note we also check for existance of batch_bounds
-    # because unravel_run makes 'static' runs of 1 livepoint
-    # but some will have bounds
-    if res2.isdynamic() or 'batch_bounds' in res2.keys():
-        new_info['batch'] = res2.samples_batch
-        new_info['bounds'] = res2.batch_bounds
-    else:
-        new_info['batch'] = np.zeros(nnew, dtype=int)
-        new_info['bounds'] = np.array([(-np.inf, np.inf)])
-
-    # Initialize our new combind run.
-    combined_info = dict(id=[],
-                         u=[],
-                         v=[],
-                         logl=[],
-                         logvol=[],
-                         logwt=[],
-                         logz=[],
-                         logzvar=[],
-                         h=[],
-                         nc=[],
-                         it=[],
-                         n=[],
-                         batch=[],
-                         blob=[])
-
-    # Check if batch info is the same and modify counters accordingly.
-    if np.all(base_info['bounds'] == new_info['bounds']):
-        bounds = base_info['bounds']
-        boffset = 0
-    else:
-        bounds = np.concatenate((base_info['bounds'], new_info['bounds']))
-        boffset = len(base_info['bounds'])
-
-    # Start our counters at the beginning of each set of dead points.
-    idx_base, idx_new = 0, 0
-    logl_b, logl_n = base_info['logl'][idx_base], new_info['logl'][idx_new]
-    nlive_b, nlive_n = base_n[idx_base], new_n[idx_new]
+    base_lowedge = np.min(base_info['bounds'][base_info['batch']])
+    new_lowedge = np.min(new_info['bounds'][new_info['batch']])
 
     # Iteratively walk through both set of samples to simulate
     # a combined run.
-    ntot = nbase + nnew
-    llmin_b = np.min(base_info['bounds'][base_info['batch']])
-    llmin_n = np.min(new_info['bounds'][new_info['batch']])
-    logvol = 0.
-    for i in range(ntot):
-        if logl_b > llmin_n and logl_n > llmin_b:
+    combined_nsamples = base_nsamples + new_nsamples
+    # Start our counters at the beginning of each set of dead points.
+    base_idx, new_idx = 0, 0
+    for i in range(combined_nsamples):
+        # Attempt to step along our samples. If we're out of samples,
+        # set values to defaults.
+        if base_idx < base_nsamples:
+            base_cur_logl = base_info['logl'][base_idx]
+            base_cur_nlive = base_nlive[base_idx]
+        else:
+            base_cur_logl = np.inf
+            base_cur_nlive = 0
+            # TODO this is potentially incorrect
+            # It is not clear what nlive should be when we
+            # are past the end of one of the run
+        if new_idx < new_nsamples:
+            new_cur_logl = new_info['logl'][new_idx]
+            new_cur_nlive = new_nlive[new_idx]
+        else:
+            new_cur_logl = np.inf
+            new_cur_nlive = 0
+
+        if base_cur_logl > new_lowedge and new_cur_logl > base_lowedge:
             # If our samples from the both runs are past the each others'
             # lower log-likelihood bound, both runs are now "active".
-            nlive = nlive_b + nlive_n
-        elif logl_b <= llmin_n:
+            cur_nlive = base_cur_nlive + new_cur_nlive
+        elif base_cur_logl <= new_lowedge:
             # If instead our collection of dead points from the "base" run
             # are below the bound, just use those.
-            nlive = nlive_b
+            cur_nlive = base_cur_nlive
         else:
             # Our collection of dead points from the "new" run
             # are below the bound, so just use those.
-            nlive = nlive_n
+            cur_nlive = new_cur_nlive
 
         # Increment our position along depending on
         # which dead point (saved or new) is worse.
 
-        if logl_b <= logl_n:
-            add_idx = idx_base
+        if base_cur_logl <= new_cur_logl:
+            add_idx = base_idx
             from_run = base_info
-            idx_base += 1
-            combined_info['batch'].append(from_run['batch'][add_idx])
+            from_map = base_bound_map
+            base_idx += 1
         else:
-            add_idx = idx_new
+            add_idx = new_idx
             from_run = new_info
-            idx_new += 1
-            combined_info['batch'].append(from_run['batch'][add_idx] + boffset)
+            from_map = new_bound_map
+            new_idx += 1
+        combined_info['batch'].append(from_map[from_run['batch'][add_idx]])
 
         for curk in ['id', 'u', 'v', 'logl', 'nc', 'it', 'blob']:
             combined_info[curk].append(from_run[curk][add_idx])
 
+        combined_info['n'].append(cur_nlive)
+
+    plateau_mode = False
+    plateau_counter = 0
+    plateau_logdvol = 0
+    logvol = 0.
+    logl_array = np.array(combined_info['logl'])
+    nlive_array = np.array(combined_info['n'])
+    for i, (curl, nlive) in enumerate(zip(logl_array, nlive_array)):
         # Save the number of live points and expected ln(volume).
-        logvol -= math.log((nlive + 1.) / nlive)
-        combined_info['n'].append(nlive)
+        if not plateau_mode:
+            plateau_mask = (logl_array[i:] == curl)
+            nplateau = plateau_mask.sum()
+            if nplateau > 1:
+                # the number of live points should not change throughout
+                # the plateau
+                # assert np.ptp(nlive_array[i:][plateau_mask]) == 0
+                # TODO currently I disabled this check
+
+                plateau_counter = nplateau
+                plateau_logdvol = logvol + np.log(1. / (nlive + 1))
+                plateau_mode = True
+        if not plateau_mode:
+            logvol -= math.log((nlive + 1.) / nlive)
+        else:
+            logvol = logvol + np.log1p(-np.exp(plateau_logdvol - logvol))
         combined_info['logvol'].append(logvol)
-
-        # Attempt to step along our samples. If we're out of samples,
-        # set values to defaults.
-        try:
-            logl_b = base_info['logl'][idx_base]
-            nlive_b = base_n[idx_base]
-        except IndexError:
-            logl_b = np.inf
-            nlive_b = 0
-        try:
-            logl_n = new_info['logl'][idx_new]
-            nlive_n = new_n[idx_new]
-        except IndexError:
-            logl_n = np.inf
-            nlive_n = 0
-
+        if plateau_mode:
+            plateau_counter -= 1
+            if plateau_counter == 0:
+                plateau_mode = False
     # Compute sampling efficiency.
-    eff = 100. * ntot / sum(combined_info['nc'])
+    eff = 100. * combined_nsamples / sum(combined_info['nc'])
 
     # Save results.
-    r = dict(niter=ntot,
+    r = dict(niter=combined_nsamples,
              ncall=np.asarray(combined_info['nc']),
              eff=eff,
              samples=np.asarray(combined_info['v']),
              logl=np.asarray(combined_info['logl']),
              logvol=np.asarray(combined_info['logvol']),
-             batch_bounds=np.asarray(bounds),
+             batch_bounds=np.asarray(combined_bounds),
              blob=np.asarray(combined_info['blob']))
 
     for curk in ['id', 'it', 'n', 'u', 'batch']:
@@ -2244,15 +2251,30 @@ def restore_sampler(fname, pool=None):
         warnings.warn(
             f'The dynesty version in the checkpoint file ({save_ver})'
             f'does not match the current dynesty version'
-            '({DYNESTY_VERSION}). That is *NOT* guaranteed to work')
+            f'({DYNESTY_VERSION}). That is *NOT* guaranteed to work')
     if pool is not None:
-        sampler.M = pool.map
-        sampler.pool = pool
-        sampler.loglikelihood.pool = pool
+        mapper = pool.map
     else:
-        sampler.loglikelihood.pool = None
-        sampler.pool = None
-        sampler.M = map
+        mapper = map
+    if hasattr(sampler, 'sampler'):
+        # This is the case of the dynamic sampler
+        # this is better be written as isinstanceof()
+        # but I couldn't do it due to circular imports
+        # TODO
+
+        # Here we are dealing with the special case of dynamic sampler
+        # where it has internal samplers that also need their pool configured
+        # this is the initial sampler
+        samplers = [sampler, sampler.sampler]
+        if sampler.batch_sampler is not None:
+            samplers.append(sampler.batch_sampler)
+    else:
+        samplers = [sampler]
+
+    for cursamp in samplers:
+        cursamp.M = mapper
+        cursamp.pool = pool
+        cursamp.loglikelihood.pool = pool
     return sampler
 
 
@@ -2280,7 +2302,11 @@ def save_sampler(sampler, fname):
     try:
         with open(tmp_fname, 'wb') as fp:
             pickle_module.dump(D, fp)
-        os.rename(tmp_fname, fname)
+        try:
+            os.rename(tmp_fname, fname)
+        except FileExistsError:
+            # this can happen in Windows, See #450
+            shutil.move(tmp_fname, fname)
     except:  # noqa
         try:
             os.unlink(tmp_fname)

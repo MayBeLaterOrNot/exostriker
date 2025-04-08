@@ -16,7 +16,7 @@ from .bounding import UnitCube
 from .sampling import sample_unif, SamplerArgument
 from .utils import (get_seed_sequence, get_print_func, progress_integration,
                     IteratorResult, RunRecord, get_neff_from_logwt,
-                    compute_integrals, DelayTimer)
+                    compute_integrals, DelayTimer, _LOWL_VAL)
 
 __all__ = ["Sampler"]
 
@@ -35,7 +35,7 @@ class Sampler:
         Function transforming a sample from the a unit cube to the parameter
         space of interest according to the prior.
 
-    npdim : int, optional
+    ndim : int, optional
         Number of parameters accepted by `prior_transform`.
 
     live_points : list of 3 `~numpy.ndarray` each with shape (nlive, ndim)
@@ -71,7 +71,7 @@ class Sampler:
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  update_interval,
                  first_update,
@@ -80,12 +80,13 @@ class Sampler:
                  pool,
                  use_pool,
                  ncdim,
+                 logvol_init=0,
                  blob=False):
 
         # distributions
         self.loglikelihood = loglikelihood
         self.prior_transform = prior_transform
-        self.npdim = npdim
+        self.ndim = ndim
         self.ncdim = ncdim
         self.blob = blob
         # live points
@@ -97,12 +98,6 @@ class Sampler:
         self.nlive = len(self.live_u)
         self.live_bound = np.zeros(self.nlive, dtype=int)
         self.live_it = np.zeros(self.nlive, dtype=int)
-
-        # bounding updates
-        self.update_interval = update_interval
-        self.ubound_ncall = first_update.get('min_ncall', 2 * self.nlive)
-        self.ubound_eff = first_update.get('min_eff', 10.)
-        self.logl_first_update = None
 
         # random state
         self.rstate = rstate
@@ -134,16 +129,30 @@ class Sampler:
 
         # sampling
         self.it = 1  # current iteration
-        self.since_update = 0  # number of calls since the last update
         self.ncall = self.nlive  # number of function calls
         self.dlv = math.log((self.nlive + 1.) / self.nlive)  # shrinkage/iter
-        self.bound = [UnitCube(self.ncdim)]  # bounding distributions
-        self.nbound = 1  # total number of unique bounding distributions
         self.added_live = False  # whether leftover live points were used
         self.eff = 0.  # overall sampling efficiency
         self.cite = ''  # Default empty
         self.save_samples = True
         self.save_bounds = True
+
+        # bounding updates
+        self.bound_update_interval = update_interval
+        self.first_bound_update_ncall = first_update.get(
+            'min_ncall', 2 * self.nlive)
+        self.first_bound_update_eff = first_update.get('min_eff', 10.)
+        self.logl_first_update = None
+        self.unit_cube_sampling = True
+        self.bound = [UnitCube(self.ncdim)]  # bounding distributions
+        self.nbound = 1  # total number of unique bounding distributions
+        self.ncall_at_last_update = 0
+
+        self.logvol_init = logvol_init
+
+        self.plateau_mode = False
+        self.plateau_counter = None
+        self.plateau_logdvol = None
         # results
         self.saved_run = RunRecord()
 
@@ -159,7 +168,7 @@ class Sampler:
     def update_proposal(self, *args, **kwargs):
         raise RuntimeError('Should be overriden')
 
-    def update(self):
+    def update(self, subset=None):
         raise RuntimeError('Should be overriden')
 
     def __setstate__(self, state):
@@ -180,7 +189,7 @@ class Sampler:
         """Re-initialize the sampler."""
 
         # live points
-        self.live_u = self.rstate.random(size=(self.nlive, self.npdim))
+        self.live_u = self.rstate.random(size=(self.nlive, self.ndim))
         if self.use_pool_ptform:
             # Use the pool to compute the prior transform.
             self.live_v = np.array(
@@ -203,11 +212,15 @@ class Sampler:
 
         # sampling
         self.it = 1
-        self.since_update = 0
         self.ncall = self.nlive
         self.bound = [UnitCube(self.ncdim)]
         self.nbound = 1
+        self.unit_cube_sampling = True
         self.added_live = False
+
+        self.plateau_mode = False
+        self.plateau_counter = None
+        self.plateau_logdvol = None
 
         # results
         self.saved_run = RunRecord()
@@ -278,24 +291,47 @@ class Sampler:
 
         return self.cite
 
-    def _beyond_unit_bound(self, loglstar):
-        """Check whether we should update our bound beyond the initial
-        unit cube."""
+    def update_bound_if_needed(self, loglstar, ncall=None, force=False):
+        """
+        Here we update the bound depending on the situation
+        The arguments are the loglstar and number of calls
+        if force is true we update the bound no matter what
+        """
 
-        if self.logl_first_update is None:
-            # If we haven't already updated our bounds, check if we satisfy
-            # the provided criteria for establishing the first bounding update.
-            check = (self.ncall > self.ubound_ncall
-                     and self.eff < self.ubound_eff)
-            if check:
-                # Save the log-likelihood where our first update took place.
+        if ncall is None:
+            ncall = self.ncall
+        call_check_first = (ncall >= self.first_bound_update_ncall)
+        call_check = (ncall >= self.bound_update_interval +
+                      self.ncall_at_last_update)
+        efficiency_check = (self.eff < self.first_bound_update_eff)
+        # there are three cases when we update the bound
+        # * if we are still using uniform cube sampling and both efficiency is
+        # lower than the threshold and the number of calls is larger than the
+        # threshold
+        # * if we are sampling from uniform cube and loglstar is larger than
+        # the previously saved logl_first_update
+        # * if we are not uniformly cube sampling and the ncall is larger
+        # than the ncall of the previous update by the update_interval
+        # * we are forced
+        if ((self.unit_cube_sampling and efficiency_check and call_check_first)
+                or (not self.unit_cube_sampling and call_check) or
+            (self.unit_cube_sampling and self.logl_first_update is not None
+             and loglstar > self.logl_first_update)) or force:
+            if loglstar == _LOWL_VAL:
+                # in the case we just started and we have some
+                # LOWL_VAL points we don't want to use them for the
+                # boundary
+                subset = self.live_logl > loglstar
+            else:
+                subset = slice(None)
+            bound = self.update(subset=subset)
+            if self.save_bounds:
+                self.bound.append(bound)
+            self.nbound += 1
+            self.ncall_at_last_update = ncall
+            if self.unit_cube_sampling:
+                self.unit_cube_sampling = False
                 self.logl_first_update = loglstar
-            return check
-        else:
-            # If we've already update our bounds, check if we've exceeded the
-            # saved log-likelihood threshold. (This is useful when sampling
-            # within `dynamicsampler`).
-            return loglstar >= self.logl_first_update
 
     def _fill_queue(self, loglstar):
         """Sequentially add new live point proposals to the queue."""
@@ -315,7 +351,7 @@ class Sampler:
                     'excessively around the very peak of the posterior')
         else:
             args = ()
-        if self._beyond_unit_bound(loglstar):
+        if not self.unit_cube_sampling:
             # Add/zip arguments to submit to the queue.
             point_queue = []
             axes_queue = []
@@ -329,7 +365,7 @@ class Sampler:
         else:
             # Propose/evaluate points directly from the unit cube.
             point_queue = self.rstate.random(size=(self.queue_size -
-                                                   self.nqueue, self.npdim))
+                                                   self.nqueue, self.ndim))
             axes_queue = np.identity(
                 self.ncdim)[None, :, :] + np.zeros(self.queue_size -
                                                    self.nqueue)[:, None, None]
@@ -369,7 +405,6 @@ class Sampler:
 
         # Grab the earliest entry.
         u, v, logl, nc, blob = self.queue.pop(0)
-
         self.used += 1  # add to the total number of used points
         self.nqueue -= 1
 
@@ -379,17 +414,15 @@ class Sampler:
         """Propose points until a new point that satisfies the log-likelihood
         constraint `loglstar` is found."""
 
-        ncall, nupdate = 0, 0
+        ncall = self.ncall
+        ncall_accum = 0
         while True:
             # Get the next point from the queue
             u, v, logl, nc, blob = self._get_point_value(loglstar)
             ncall += nc
+            ncall_accum += nc
 
-            # Bounding checks.
-            ucheck = ncall >= self.update_interval * (1 + nupdate)
-            bcheck = self._beyond_unit_bound(loglstar)
-
-            if blob is not None and bcheck:
+            if blob is not None and not self.unit_cube_sampling:
                 # If our queue is empty, update any tuning parameters
                 # associated
                 # with our proposal (sampling) method.
@@ -397,22 +430,19 @@ class Sampler:
                 # the history of evaluations
                 self.update_proposal(blob, update=self.nqueue <= 0)
 
+            # the reason I'm not using self.ncall is that it's updated at
+            # higher level
+            # also on purpose this is placed in nqueue==0
+            # because we only want update if we are planning to generate
+            # new points
+            if self.nqueue == 0:
+                self.update_bound_if_needed(loglstar, ncall=ncall)
+
             # If we satisfy the log-likelihood constraint, we're done!
             if logl > loglstar:
                 break
 
-            # If there has been more than `update_interval` function calls
-            # made *and* we satisfy the criteria for moving beyond sampling
-            # from the unit cube, update the bound.
-            if ucheck and bcheck:
-                bound = self.update()
-                if self.save_bounds:
-                    self.bound.append(bound)
-                self.nbound += 1
-                nupdate += 1
-                self.since_update = -ncall  # ncall will be added back later
-
-        return u, v, logl, ncall
+        return u, v, logl, ncall_accum
 
     def add_live_points(self):
         """Add the remaining set of live points to the current set of dead
@@ -426,29 +456,56 @@ class Sampler:
                              "been added to the list of samples!")
         else:
             self.added_live = True
+        if len(self.saved_run['logz']) > 0:
+            logz = self.saved_run['logz'][-1]
+            logzvar = self.saved_run['logzvar'][-1]
+            h = self.saved_run['h'][-1]
+            loglstar = self.saved_run['logl'][-1]
+            logvol = self.saved_run['logvol'][-1]
+        else:
+            # this is special case if we didn't do any running
+            # just sampled uniformly and bailed out
+            h = 0.  # information, initially *0.*
+            logz = -1.e300  # ln(evidence), initially *0.*
+            logzvar = 0.  # var[ln(evidence)], initially *0.*
+            logvol = self.logvol_init
+            # initially contains the whole prior (volume=1.)
+            loglstar = -1.e300  # initial ln(likelihood)
 
-        logz = self.saved_run['logz'][-1]
-        logzvar = self.saved_run['logzvar'][-1]
-        h = self.saved_run['h'][-1]
-        loglstar = self.saved_run['logl'][-1]
-        logvol = self.saved_run['logvol'][-1]
         # After N samples have been taken out, the remaining volume is
         # `e^(-N / nlive)`. The remaining points are distributed uniformly
         # within the remaining volume so that the expected volume enclosed
         # by the `i`-th worst likelihood is
         # `e^(-N / nlive) * (nlive + 1 - i) / (nlive + 1)`.
-        logvols = np.log(1. - (np.arange(self.nlive) + 1.) / (self.nlive + 1.))
-
-        # Defining change in `logvol` used in `logzvar` approximation.
+        # The tricky bit here is what to do if we have a plateau that we
+        # haven't fully exhausted
+        # then we first use the old delta(V) till we are done with the plateau
+        if not self.plateau_mode:
+            logvols = np.log(1. - (np.arange(self.nlive) + 1.) /
+                             (self.nlive + 1.))
+            # Defining change in `logvol` used in `logzvar` approximation.
+        else:
+            # we first just use old delta(v)'s associated with each point
+            # in the plateau
+            logvols = np.log1p(-((1 + np.arange(self.plateau_counter)) *
+                                 np.exp(self.plateau_logdvol - logvol)))
+            # after we're done with it we just assign 1/(nrest+1) fraction of
+            # the remaining volume to each leftover point
+            nrest = self.nlive - self.plateau_counter
+            logvols = np.concatenate([
+                logvols,
+                logvols[-1] + np.log1p(-(1 + np.arange(nrest)) / (nrest + 1))
+            ])
+        # IMPORTANT in those caclulations I keep logvol separate
+        # and add it later to ensure the first dlv=0
         dlvs = -np.diff(logvols, prepend=0)
         logvols += logvol
-
         # Sorting remaining live points.
         lsort_idx = np.argsort(self.live_logl)
         loglmax = max(self.live_logl)
 
         # Grabbing relevant values from the last dead point.
-        if self._beyond_unit_bound(loglstar):
+        if not self.unit_cube_sampling:
             bounditer = self.nbound - 1
         else:
             bounditer = 0
@@ -494,8 +551,9 @@ class Sampler:
                         h=h,
                         nc=1,  # this is technically a lie
                         # as we didn't call the likelihood even once
-                        # however because we lose track of ncs if we start from points
-                        # that are not sampled from unit cube it can lead to sum(nc)!=ncall
+                        # however because we lose track of ncs if we start
+                        # from points that are not sampled from unit cube
+                        # it can lead to sum(nc)!=ncall
                         boundidx=boundidx,
                         it=point_it,
                         bounditer=bounditer,
@@ -531,7 +589,7 @@ class Sampler:
                 for k in [
                         'id', 'u', 'v', 'logl', 'logvol', 'logwt', 'logz',
                         'logzvar', 'h', 'nc', 'boundidx', 'it', 'bounditer',
-                        'scale'
+                        'scale', 'blob'
                 ]:
                     del self.saved_run[k][-self.nlive:]
         else:
@@ -603,7 +661,7 @@ class Sampler:
             Index of the live point with the worst likelihood. This is our
             new dead point sample.
 
-        ustar : `~numpy.ndarray` with shape (npdim,)
+        ustar : `~numpy.ndarray` with shape (ndim,)
             Position of the sample.
 
         vstar : `~numpy.ndarray` with shape (ndim,)
@@ -663,49 +721,50 @@ class Sampler:
             h = 0.  # information, initially *0.*
             logz = -1.e300  # ln(evidence), initially *0.*
             logzvar = 0.  # var[ln(evidence)], initially *0.*
-            logvol = 0.  # initially contains the whole prior (volume=1.)
+            logvol = self.logvol_init
+            # initially contains the whole prior (volume=1.)
             loglstar = -1.e300  # initial ln(likelihood)
             delta_logz = 1.e300  # ln(ratio) of total/current evidence
 
-            # Check if we should initialize a different bounding distribution
-            # instead of using the unit cube.
-            if self._beyond_unit_bound(loglstar):
-                bound = self.update()
-                if self.save_bounds:
-                    self.bound.append(bound)
-                    self.nbound += 1
-                self.since_update = 0
         else:
             # Remove live points (if added) from previous run.
             if self.added_live and not resume:
+                warnings.warn(
+                    'Repeatedly running sample() or run_nested() '
+                    '(when not just resuming an existing run is considered '
+                    'deprecated and will be removed in the future',
+                    DeprecationWarning)
                 self._remove_live_points()
 
             # Get final state from previous run.
-            h, logz, logzvar, logvol = [
+            h, logz, logzvar, logvol, loglstar = [
                 self.saved_run[_][-1]
-                for _ in ['h', 'logz', 'logzvar', 'logvol']
+                for _ in ['h', 'logz', 'logzvar', 'logvol', 'logl']
             ]
-            loglstar = np.min(self.live_logl)  # ln(likelihood)
             delta_logz = np.logaddexp(0,
                                       np.max(self.live_logl) + logvol - logz)
 
+        nplateau = 0
         stop_iterations = False
         # The main nested sampling loop.
         for it in range(sys.maxsize):
+            delta_logz = np.logaddexp(0,
+                                      np.max(self.live_logl) + logvol - logz)
+
             # Stopping criterion 1: current number of iterations
             # exceeds `maxiter`.
-            if it > maxiter:
-                stop_iterations = True
-
             # Stopping criterion 2: current number of `loglikelihood`
             # calls exceeds `maxcall`.
-            if ncall > maxcall:
+            if it > maxiter or ncall > maxcall:
                 stop_iterations = True
+                if dlogz is not None and delta_logz > 10 * dlogz:
+                    warnings.warn('The sampling was stopped short due to'
+                                  ' maxiter/maxcall limit the delta(log(z))'
+                                  ' criterion is not achieved; posterior may'
+                                  ' be poorly sampled')
 
             # Stopping criterion 3: estimated (fractional) remaining evidence
             # lies below some threshold set by `dlogz`.
-            delta_logz = np.logaddexp(0,
-                                      np.max(self.live_logl) + logvol - logz)
             if dlogz is not None and delta_logz < dlogz:
                 stop_iterations = True
 
@@ -718,6 +777,10 @@ class Sampler:
             # samples has been achieved.
             if (n_effective is not None) and not np.isposinf(n_effective):
                 current_n_effective = self.n_effective
+                # TODO This needs to be refactored
+                # here we are adding final live points then checking
+                # if n_effective is large enough then removing them again
+                # this is slow and not a good logic
                 if current_n_effective > n_effective:
                     if add_live:
                         self.add_final_live(print_progress=False)
@@ -728,6 +791,11 @@ class Sampler:
                         self.added_live = False
                     if current_n_effective > n_effective:
                         stop_iterations = True
+            if np.ptp(self.live_logl) == 0:
+                warnings.warn(
+                    'We have reached the plateau in the likelihood we are'
+                    ' stopping sampling')
+                stop_iterations = True
 
             if stop_iterations:
                 if not self.save_samples:
@@ -741,25 +809,27 @@ class Sampler:
                     self.saved_run.append(add_info)
                 break
 
-            # Expected ln(volume) shrinkage.
-            logvol -= self.dlv
-
-            # After `update_interval` interations have passed *and* we meet
-            # the criteria for moving beyond sampling from the unit cube,
-            # update the bound using the current set of live points.
-            ucheck = self.since_update >= self.update_interval
-            bcheck = self._beyond_unit_bound(loglstar)
-            if ucheck and bcheck:
-                bound = self.update()
-                if self.save_bounds:
-                    self.bound.append(bound)
-                self.nbound += 1
-                self.since_update = 0
-
-            # Locate the "live" point with the lowest `logl`.
             worst = np.argmin(self.live_logl)  # index
+            # Locate the "live" point with the lowest `logl`.
             worst_it = self.live_it[worst]  # when point was proposed
             boundidx = self.live_bound[worst]  # associated bound index
+
+            if not self.plateau_mode:
+                nplateau = (self.live_logl == self.live_logl[worst]).sum()
+                if nplateau > 1:
+                    self.plateau_mode = True
+                    self.plateau_counter = nplateau
+                    self.plateau_logdvol = np.log(1. /
+                                                  (self.nlive + 1)) + logvol
+                    # this is log (delta vol)
+
+            if not self.plateau_mode:
+                # Expected ln(volume) shrinkage.
+                cur_dlv = self.dlv
+            else:
+                cur_dlv = -np.log1p(-np.exp(self.plateau_logdvol - logvol))
+            assert cur_dlv > 0
+            logvol -= cur_dlv
 
             # Set our new worst likelihood constraint.
             # Notice we are doing copies here because live_u and live_v
@@ -778,18 +848,17 @@ class Sampler:
             u, v, logl, nc = self._new_point(loglstar_new)
             ncall += nc
             self.ncall += nc
-            self.since_update += nc
             if self.blob:
                 new_blob = logl.blob
             else:
                 new_blob = None
             (logwt, logz, logzvar,
              h) = progress_integration(loglstar, loglstar_new, logz, logzvar,
-                                       logvol, self.dlv, h)
+                                       logvol, cur_dlv, h)
             loglstar = loglstar_new
 
             # Compute bound index at the current iteration.
-            if self._beyond_unit_bound(loglstar):
+            if not self.unit_cube_sampling:
                 bounditer = self.nbound - 1
             else:
                 bounditer = 0
@@ -826,6 +895,10 @@ class Sampler:
             # Increment total number of iterations.
             self.it += 1
 
+            if self.plateau_mode:
+                self.plateau_counter -= 1
+                if self.plateau_counter == 0:
+                    self.plateau_mode = False
             # Return dead point and ancillary quantities.
             yield IteratorResult(worst=worst,
                                  ustar=ustar,

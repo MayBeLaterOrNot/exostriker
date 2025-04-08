@@ -16,6 +16,10 @@ import numpy as np
 #import matplotlib.pyplot as plt
 #plt.switch_backend('SVG')
 
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import time
 #import multiprocessing
@@ -934,8 +938,7 @@ def transit_loglik(program, tr_files,vel_files,tr_params,tr_model,par,rv_gp_npar
 
         ###### TBD, GP for each transit dataset #####
           
-        tra_gp_model.append(flux_model_)
-
+        #tra_gp_model.append(flux_model_)
 
         flux_model.append(flux_model_)
         flux.append(flux_)
@@ -968,8 +971,10 @@ def transit_loglik(program, tr_files,vel_files,tr_params,tr_model,par,rv_gp_npar
             flux_o_c_gp_  = flux_o_c_  - flux_model_gp  
  
             flux_o_c_gp.append(flux_o_c_gp_)
+            tra_gp_model.append(flux_model_gp)
         else:
             flux_o_c_gp.append(flux_o_c_)
+            tra_gp_model.append(flux_model_)
 
     
     flux_model_all  = np.concatenate(flux_model)#[flux_model_ < 1]
@@ -2441,6 +2446,9 @@ def run_nestsamp(obj, **kwargs):
 #    from multiprocessing import Pool
 #    from contextlib import closing
 
+    #import multiprocessing as mp
+    #from multiprocessing import Pool
+
 
     dynesty_samp = obj.ns_samp_method
     print_progress = obj.ns_progress #std_output
@@ -2463,9 +2471,10 @@ def run_nestsamp(obj, **kwargs):
     else:
          ns_maxcall = obj.ns_maxcall[1]
  
+    #from multiprocessing import get_context
+    #ctx = get_context("fork")
 
-
-    thread = Pool(ncpus=threads)
+    thread = Pool(ncpus=threads)#, context=ctx)
 
 
     if Dynamic_nest == False:
@@ -2486,7 +2495,7 @@ def run_nestsamp(obj, **kwargs):
             maxiter = ns_maxiter, maxcall = ns_maxcall ) #dlogz=stop_crit,
             thread.close()
             thread.join()
-            thread.clear()
+            #thread.clear()
 
         else:
              sampler = dynesty.NestedSampler(partial_func, prior_transform, ndim, nlive=nwalkers, sample = dynesty_samp, bound = ns_bound)
@@ -2523,7 +2532,7 @@ def run_nestsamp(obj, **kwargs):
                     maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac})   #nlive_batch=1
                     threads_context.close()
                     threads_context.join()
-                    threads_context.clear()
+                    #threads_context.clear()
                                 
             else:
                 
@@ -2534,7 +2543,7 @@ def run_nestsamp(obj, **kwargs):
                 maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac})   #nlive_batch=1
                 thread.close()
                 thread.join()
-                thread.clear()
+                #thread.clear()
                
             
 
@@ -2546,7 +2555,7 @@ def run_nestsamp(obj, **kwargs):
         # just in case
         thread.close()
         thread.join()
-        thread.clear()
+        #thread.clear()
 
        # obj.dyn_res = sampler.results
 
@@ -2888,7 +2897,7 @@ def run_mcmc(obj, **kwargs):
 
     pool.close()
     pool.join()
-    pool.clear()
+    #pool.clear()
 
  #  print("--- %s seconds ---" % (time.time() - start_time))
 

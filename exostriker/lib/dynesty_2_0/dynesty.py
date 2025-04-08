@@ -47,7 +47,7 @@ def _get_citations(nested_type, bound, sampler):
     # Main references for the code
     default_refs = [
         ("Speagle (2020)", "ui.adsabs.harvard.edu/abs/2020MNRAS.493.3132S"),
-        ("Koposov et al. (2022)", "doi.org/10.5281/zenodo.3348367")
+        ("Koposov et al. (2023)", "doi.org/10.5281/zenodo.3348367")
     ]
 
     # Basics of nested sampling algorithm
@@ -106,9 +106,9 @@ def _get_citations(nested_type, bound, sampler):
         """
         if isinstance(x, str):
             return x
-        elif isinstance(x, tuple):
+        if isinstance(x, tuple):
             return x[0] + ': ' + x[1]
-        elif isinstance(x, list):
+        if isinstance(x, list):
             return '\n'.join([_[0] + ': ' + _[1] for _ in x])
         else:
             return str(x)
@@ -187,6 +187,12 @@ def _get_walks_slices(walks0, slices0, sample, ndim):
         walks = 20 + ndim
     slices = slices0 or slices
     walks = walks0 or walks
+    if sample in ['hslice', 'rslice', 'slice'] and walks0 is not None:
+        warnings.warn('Specifying walks option while using slice sampler'
+                      ' does not make sense')
+    elif sample in ['rwalk'] and slices0 is not None:
+        warnings.warn('Specifying slice option while using rwalk sampler'
+                      ' does not make sense')
     return walks, slices
 
 
@@ -214,6 +220,16 @@ def _parse_pool_queue(pool, queue_size):
         raise ValueError("`queue_size > 1` but no `pool` provided.")
 
     return M, queue_size
+
+
+def _check_first_update(first_update):
+    """
+    Verify that the first_update dictionary is valid
+    Specifically that it doesn't have unrecognized keywords
+    """
+    for k in first_update.keys():
+        if k not in ['min_ncall', 'min_eff']:
+            raise ValueError('Unrecognized keywords in first_update')
 
 
 def _assemble_sampler_docstring(dynamic):
@@ -319,13 +335,6 @@ optional
             efficiency in percent (`'min_eff'`). Defaults are `2 * nlive` and
             `10.`, respectively.
 
-        npdim : int, optional
-            Number of parameters accepted by `prior_transform`. This might
-            differ from `ndim` in the case where a parameter of loglikelihood
-            is dependent upon multiple independently distributed parameters,
-            some of which may
-            be nuisance parameters.
-
         rstate : `~numpy.random.Generator`, optional
             `~numpy.random.Generator` instance. If not given, the
              global random state of the `~numpy.random` module will be used.
@@ -360,7 +369,7 @@ optional
             transformed variables, and `live_logl`, the associated
             loglikelihoods.
             By default, if these are not provided the initial set of live
-            points will be drawn uniformly from the unit `npdim`-cube.
+            points will be drawn uniformly from the unit `ndim`-cube.
             **WARNING: It is crucial that the initial set of live points have
             been sampled from the prior. Failure to provide a set of valid
             live points
@@ -458,13 +467,16 @@ optional
             will be sampled using the sampling method, the remaining
             dimensions will
             just sample uniformly from the prior distribution.
-            If this is `None` (default), this will default to npdim.
+            If this is `None` (default), this will default to ndim.
 
         blob: bool, optional
             The default value is False. If it is true, then the log-likelihood
             should return the tuple of logl and a numpy-array "blob" that will
             stored as part of the chain. That blob can contain auxiliary
             information computed inside the likelihood function.
+
+        npdim : int
+            This option is deprecated and should not be used
     """
 
     static_docstring = f"""
@@ -538,10 +550,15 @@ class NestedSampler(SuperSampler):
                 history_filename=None):
 
         # Prior dimensions.
-        if npdim is None:
-            npdim = ndim
-        if ncdim is None:
-            ncdim = npdim
+        if npdim is not None:
+            if npdim != ndim:
+                raise ValueError('''npdim functionality is not functioning
+and is deprecated ''')
+            else:
+                warnings.warn(
+                    """the npdim keyword/functionality is deprecated as not
+functioning and will be removed in further releases""", DeprecationWarning)
+        ncdim = ncdim or ndim
 
         # Bounding method.
         if bound not in _SAMPLERS:
@@ -553,7 +570,7 @@ class NestedSampler(SuperSampler):
 
         walks, slices = _get_walks_slices(walks, slices, sample, ndim)
 
-        if ncdim != npdim and sample in ['slice', 'hslice', 'rslice']:
+        if ncdim != ndim and sample in ['slice', 'hslice', 'rslice']:
             raise ValueError('ncdim unsupported for slice sampling')
 
         # Custom sampling function.
@@ -575,7 +592,7 @@ class NestedSampler(SuperSampler):
             warnings.warn(
                 "Beware! Having `nlive <= 2 * ndim` is extremely risky!")
 
-        nonbounded = get_nonbounded(npdim, periodic, reflective)
+        nonbounded = get_nonbounded(ndim, periodic, reflective)
         kwargs['nonbounded'] = nonbounded
         kwargs['periodic'] = periodic
         kwargs['reflective'] = reflective
@@ -583,22 +600,20 @@ class NestedSampler(SuperSampler):
         # Keyword arguments controlling the first update.
         if first_update is None:
             first_update = {}
+        else:
+            _check_first_update(first_update)
 
         # Random state.
         if rstate is None:
             rstate = get_random_generator()
 
         # Log-likelihood.
-        if logl_args is None:
-            logl_args = []
-        if logl_kwargs is None:
-            logl_kwargs = {}
+        logl_args = logl_args or []
+        logl_kwargs = logl_kwargs or {}
 
         # Prior transform.
-        if ptform_args is None:
-            ptform_args = []
-        if ptform_kwargs is None:
-            ptform_kwargs = {}
+        ptform_args = ptform_args or []
+        ptform_kwargs = ptform_kwargs or {}
 
         # gradient
         if grad_args is None:
@@ -662,22 +677,22 @@ class NestedSampler(SuperSampler):
             kwargs['grad'] = grad
             kwargs['compute_jac'] = compute_jac
 
-        live_points = _initialize_live_points(live_points,
-                                              ptform,
-                                              loglike,
-                                              M,
-                                              nlive=nlive,
-                                              npdim=npdim,
-                                              rstate=rstate,
-                                              blob=blob,
-                                              use_pool_ptform=use_pool.get(
-                                                  'prior_transform', True))
+        live_points, logvol_init, init_ncalls = _initialize_live_points(
+            live_points,
+            ptform,
+            loglike,
+            M,
+            nlive=nlive,
+            ndim=ndim,
+            rstate=rstate,
+            blob=blob,
+            use_pool_ptform=use_pool.get('prior_transform', True))
 
         # Initialize our nested sampler.
         sampler = super().__new__(_SAMPLERS[bound])
         sampler.__init__(loglike,
                          ptform,
-                         npdim,
+                         ndim,
                          live_points,
                          sample,
                          update_interval,
@@ -688,8 +703,9 @@ class NestedSampler(SuperSampler):
                          use_pool,
                          kwargs,
                          ncdim=ncdim,
-                         blob=blob)
-
+                         blob=blob,
+                         logvol_init=logvol_init)
+        sampler.ncalls = init_ncalls
         return sampler
 
 
@@ -741,11 +757,15 @@ class DynamicNestedSampler(DynamicSampler):
                  history_filename=None):
 
         # Prior dimensions.
-        if npdim is None:
-            npdim = ndim
-        if ncdim is None:
-            ncdim = npdim
-
+        if npdim is not None:
+            if npdim != ndim:
+                raise ValueError('''npdim functionality is not functioning
+and is deprecated ''')
+            else:
+                warnings.warn(
+                    """the npdim keyword/functionality is deprecated as not
+functioning and will be removed in further releases""", DeprecationWarning)
+        ncdim = ncdim or ndim
         nlive = nlive or 500
 
         # Bounding method.
@@ -758,11 +778,11 @@ class DynamicNestedSampler(DynamicSampler):
 
         walks, slices = _get_walks_slices(walks, slices, sample, ndim)
 
-        if ncdim != npdim and sample in ['slice', 'hslice', 'rslice']:
+        if ncdim != ndim and sample in ['slice', 'hslice', 'rslice']:
             raise ValueError('ncdim unsupported for slice sampling')
 
         update_interval_ratio = _get_update_interval_ratio(
-            update_interval, sample, bound, ndim, 1, slices, walks)
+            update_interval, sample, bound, ndim, nlive, slices, walks)
 
         kwargs = {}
 
@@ -778,7 +798,7 @@ class DynamicNestedSampler(DynamicSampler):
         # Citation generator.
         kwargs['cite'] = _get_citations('dynamic', bound, sample)
 
-        nonbounded = get_nonbounded(npdim, periodic, reflective)
+        nonbounded = get_nonbounded(ndim, periodic, reflective)
         kwargs['nonbounded'] = nonbounded
         kwargs['periodic'] = periodic
         kwargs['reflective'] = reflective
@@ -786,22 +806,20 @@ class DynamicNestedSampler(DynamicSampler):
         # Keyword arguments controlling the first update.
         if first_update is None:
             first_update = {}
+        else:
+            _check_first_update(first_update)
 
         # Random state.
         if rstate is None:
             rstate = get_random_generator()
 
         # Log-likelihood.
-        if logl_args is None:
-            logl_args = []
-        if logl_kwargs is None:
-            logl_kwargs = {}
+        logl_args = logl_args or []
+        logl_kwargs = logl_kwargs or {}
 
         # Prior transform.
-        if ptform_args is None:
-            ptform_args = []
-        if ptform_kwargs is None:
-            ptform_kwargs = {}
+        ptform_args = ptform_args or []
+        ptform_kwargs = ptform_kwargs or {}
 
         # gradient
         if grad_args is None:
@@ -862,7 +880,7 @@ class DynamicNestedSampler(DynamicSampler):
             kwargs['compute_jac'] = compute_jac
 
         # Initialize our nested sampler.
-        super().__init__(loglike, ptform, npdim, bound, sample,
+        super().__init__(loglike, ptform, ndim, bound, sample,
                          update_interval_ratio, first_update, rstate,
                          queue_size, pool, use_pool, ncdim, nlive, kwargs)
 

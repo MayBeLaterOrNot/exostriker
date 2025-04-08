@@ -157,7 +157,10 @@ os.environ["QT_DEVICE_PIXEL_RATIO"] = "1"
 os.environ["QT_NO_FT_CACHE"] = "1"
 os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
 
-
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 #os.environ["QT_LOGGING_RULES"] = '*.debug=false'
 #os.system("export QT_LOGGING_RULES")
@@ -2941,6 +2944,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
             zzz[i].showAxis('top') 
             zzz[i].showAxis('right') 
             zzz[i].getAxis('bottom').enableAutoSIPrefix(enable=False)
+            zzz[i].getAxis('left').enableAutoSIPrefix(enable=False)            
             #zzz[i].autoRange()
 
             zzz[i].getViewBox().parentItem().ctrlMenu.actions()[-4].setVisible(False) #removes the "Avarage" junk
@@ -2980,7 +2984,9 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         #for i in (1, 2):
         l.layout.setRowMinimumHeight(0, 220)                                                    
         l.layout.setRowMinimumHeight(1, 30)         
-        l.layout.setRowMaximumHeight(1, 150)                                                                                               
+        l.layout.setRowMaximumHeight(1, 150)        
+        
+                                                                                                       
         pe0.showAxis('top') 
         pe0.showAxis('right') 
         pe1.showAxis('top') 
@@ -2989,7 +2995,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         pe0.ctrlMenu.actions()[-4].setVisible(False) #removes the submenu "Avarage" junk       
         pe1.ctrlMenu.actions()[-4].setVisible(False) #removes the submenu "Avarage" junk       
 
-
+        #pe0.getAxis('left').setStyle(autoExpandTextSpace=True)
         pe0.getAxis('left').setWidth(np.rint(60.0*(float(self.plot_font.pointSize())/11.0)))
         pe0.getAxis("left").tickFont = self.plot_font
         #pe0.getAxis('bottom').setHeight(np.rint(50.0*(float(self.plot_font.pointSize())/11.0)))
@@ -3003,12 +3009,13 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
 
         #pe0.getViewBox().setAspectLocked(lock=False, ratio=2)
 
-        pe0.getAxis("bottom").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
+        #pe0.getAxis("bottom").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe0.getAxis("top").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe0.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe0.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         #pe0.getAxis('bottom').enableAutoSIPrefix(enable=False)
 
+        #pe1.getAxis('left').setStyle(autoExpandTextSpace=True)
 
         pe1.getAxis('left').setWidth(np.rint(60.0*(float(self.plot_font.pointSize())/11.0)))
         pe1.getAxis("left").tickFont = self.plot_font
@@ -3023,14 +3030,16 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         pe1.setAxisItems({'bottom': pg_hack.CustomAxisItem('bottom')})
         pe1.setLabel('bottom', '%s'%p2.getAxis("bottom").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
 
-
+ 
         pe1.getAxis("bottom").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe1.getAxis("top").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe1.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe1.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe1.getAxis('bottom').enableAutoSIPrefix(enable=False)
+        pe1.getAxis('left').enableAutoSIPrefix(enable=False)
 
-
+        #pe0.getAxis('left').label.setStyle(offset=20)  # Add this line
+        #pe1.getAxis('left').label.setStyle(offset=20)  # Add this line        
         ax0 = pe0.getAxis('bottom')      #get handle to x-axis 0
         ax0.setStyle(showValues=False)
 
@@ -3112,7 +3121,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         p01.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p01.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p01.getAxis('bottom').enableAutoSIPrefix(enable=False)
-
+        p01.getAxis('left').enableAutoSIPrefix(enable=False)
 
         ax0 = p00.getAxis('bottom')      #get handle to x-axis 0
         ax0.setStyle(showValues=False)
@@ -3172,7 +3181,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         p30.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p30.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p30.getAxis('bottom').enableAutoSIPrefix(enable=False)
-        
+        p30.getAxis('left').enableAutoSIPrefix(enable=False)        
          
         
         p31.getAxis('left').setWidth(np.rint(60.0*(float(self.plot_font.pointSize())/11.0)))
@@ -3191,6 +3200,8 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         p31.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p31.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p31.getAxis('bottom').enableAutoSIPrefix(enable=False)
+        p31.getAxis('left').enableAutoSIPrefix(enable=False)
+
         
         p31.setLabel('bottom', '%s'%p4.getAxis("bottom").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
         
@@ -3249,7 +3260,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         p_ttv_00.getAxis("top").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p_ttv_00.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p_ttv_00.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
-        #p00.getAxis('bottom').enableAutoSIPrefix(enable=False)
+        p_ttv_00.getAxis('left').enableAutoSIPrefix(enable=False)
 
 
         p_ttv_01.getAxis('left').setWidth(np.rint(60.0*(float(self.plot_font.pointSize())/11.0)))
@@ -3271,7 +3282,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         p_ttv_01.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p_ttv_01.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p_ttv_01.getAxis('bottom').enableAutoSIPrefix(enable=False)
-
+        p_ttv_01.getAxis('left').enableAutoSIPrefix(enable=False)
 
         ax0 = p_ttv_00.getAxis('bottom')      #get handle to x-axis 0
         ax0.setStyle(showValues=False)
@@ -3352,7 +3363,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         p_ast_01.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p_ast_01.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         p_ast_01.getAxis('bottom').enableAutoSIPrefix(enable=False)
-
+        p_ast_01.getAxis('left').enableAutoSIPrefix(enable=False)
 
         ax0 = p_ast_00.getAxis('bottom')      #get handle to x-axis 0
         ax0.setStyle(showValues=False)
@@ -3407,7 +3418,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         pe0.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe0.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe0.getAxis('bottom').enableAutoSIPrefix(enable=False)
-        
+        pe0.getAxis('left').enableAutoSIPrefix(enable=False)        
          
         
         pe1.getAxis('left').setWidth(np.rint(60.0*(float(self.plot_font.pointSize())/11.0)))
@@ -3426,6 +3437,7 @@ Data set # %s is present, but you cannot tie it to a Data set with a larger inde
         pe1.getAxis("left").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe1.getAxis("right").setStyle(tickTextOffset = 12, tickFont = self.plot_font)
         pe1.getAxis('bottom').enableAutoSIPrefix(enable=False)
+        pe1.getAxis('left').enableAutoSIPrefix(enable=False)
         
         pe1.setLabel('bottom', '%s'%pe.getAxis("bottom").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
         
@@ -4534,11 +4546,13 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
             print("Not yet possible to plot 'rich transit model' with a GP model")
             t_model        = np.concatenate([np.array(transit_results_sep[0][x], dtype=float) for x in range(len(fit.tra_data_sets)) if len(transit_results_sep[0][x]) != 0])
             flux_model_ex  = np.concatenate([np.array(transit_results_sep[3][x], dtype=float) for x in range(len(fit.tra_data_sets)) if len(transit_results_sep[3][x]) != 0])
+            flux_model_ex_gp  = np.concatenate([np.array(transit_results_sep[6][x], dtype=float) for x in range(len(fit.tra_data_sets)) if len(transit_results_sep[6][x]) != 0])            
+            
 
         else:
             t_model        = np.concatenate([np.array(transit_results_sep[0][x], dtype=float) for x in range(len(fit.tra_data_sets)) if len(transit_results_sep[0][x]) != 0])
             flux_model_ex  = np.concatenate([np.array(transit_results_sep[3][x], dtype=float) for x in range(len(fit.tra_data_sets)) if len(transit_results_sep[3][x]) != 0])
-
+            flux_model_ex_gp  = np.concatenate([np.array(transit_results_sep[6][x], dtype=float) for x in range(len(fit.tra_data_sets)) if len(transit_results_sep[6][x]) != 0])   
 
 
 
@@ -4551,6 +4565,8 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
             flux         = np.array(transit_results_sep[1][j], dtype=float)
             flux_err     = np.array(transit_results_sep[2][j], dtype=float)
             flux_model   = np.array(transit_results_sep[3][j], dtype=float)
+
+            flux_model_gp   = np.array(transit_results_sep[6][j], dtype=float)
             
             if fit.tra_doGP == True:
                 if self.plot_transit_GP_model.isChecked():
@@ -4573,7 +4589,7 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
            # print(flux)
             ############### Phase signal TBD this should not be here! ####################################
 
-            if self.plot_phase_pholded_tran.isChecked() and fit.tra_doGP != True and fit.npl > 0:
+            if self.plot_phase_pholded_tran.isChecked() and fit.npl > 0:
                 
                 self.tra_xaxis_offset.setEnabled(True) 
                 self.trans_phase_slider.setEnabled(True) 
@@ -4590,19 +4606,32 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
                 flux_err      = flux_err[sort]
                 flux_model    = flux_model[sort] 
                 tr_o_c        = tr_o_c[sort]
-                #fit.ph_data_tra[i] = [data_time_phase[sort] ,flux[sort], flux_err[sort]]
-
-
-                #model_time_phase = np.array( (t_model - fit.P[ph_pl_ind]/2.0)%fit.P[ph_pl_ind]  )
-               # sort2 = np.array(sorted(range(len(model_time_phase)), key=lambda k: model_time_phase[k])    )
-
-                #t_model = model_time_phase[sort2] 
-               # flux_model_ex    = flux_model_ex[sort2] 
-                #fit.ph_model_tra[i] = [model_time_phase[sort2] ,flux_model_ex[sort2]]
-                if self.tra_plot_add_o_c.isChecked():
-                    p31.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})
+                flux_model_gp = flux_model_gp[sort]
+                
+                if self.extra_plot_Tra_phase_norm.isChecked():
+                    t = (t/max(t)) - 0.5   
+                             
+                if fit.tra_doGP == True: 
+                    flux = flux - flux_model_gp
+                    #print("GP model was subtracted!!!")
+                
+                if self.extra_plot_Tra_phase_norm.isChecked():
+                    p31.setLabel('bottom', 'phase', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})
+                    p3.setLabel('bottom', 'phase', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})            
+                    p4.setLabel('bottom', 'phase', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})  
                 else:
-                    p3.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})
+                    p31.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})
+                    p3.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})                    
+                    p4.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})               
+ 
+                #if self.tra_plot_add_o_c.isChecked():
+               #     p31.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})
+                    
+                    
+               # else:
+               #     p3.setLabel('bottom', 'phase [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()})
+                
+                
             else:
 
                 if self.tra_plot_add_o_c.isChecked():
@@ -4611,19 +4640,25 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
                     p31.getAxis("bottom").setStyle(tickTextOffset = 2)
                     p31.getAxis("left").setStyle(tickTextOffset = 2)
                     p30.getAxis("left").setStyle(tickTextOffset = 2)
-
+                    p4.setLabel('bottom', 'BJD [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()}) 
+                  #  p3.getAxis("bottom").setTickFont= self.plot_font
+                    p4.getAxis("bottom").setStyle(tickTextOffset = 2)                
+                    p4.getAxis("left").setStyle(tickTextOffset = 2) 
                 else:
                     p3.setLabel('bottom', 'BJD [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()}) 
                   #  p3.getAxis("bottom").setTickFont= self.plot_font
                     p3.getAxis("bottom").setStyle(tickTextOffset = 2)                
                     p3.getAxis("left").setStyle(tickTextOffset = 2) 
-
+                    p4.setLabel('bottom', 'BJD [days]', units='',  **{'font-size':'%dpt'%self.plot_font.pointSize()}) 
+                  #  p3.getAxis("bottom").setTickFont= self.plot_font
+                    p4.getAxis("bottom").setStyle(tickTextOffset = 2)                
+                    p4.getAxis("left").setStyle(tickTextOffset = 2) 
 
                 self.tra_xaxis_offset.setEnabled(False) 
                 self.trans_phase_slider.setEnabled(False)
 
-            p01.setLabel('bottom', '%s'%p01.getAxis("bottom").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
-            p01.setLabel('left', '%s'%p01.getAxis("left").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
+            p31.setLabel('bottom', '%s'%p31.getAxis("bottom").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
+            p31.setLabel('left', '%s'%p31.getAxis("left").labelText, units='', **{'font-size':'%dpt'%self.plot_font.pointSize()})
 
 
 
@@ -4692,16 +4727,6 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
             beam=0.0, pen=fit.tra_colors[j]+"%02x"%int(dill.copy(fit.pyqt_color_alpha_tra[j])))
             p4.addItem(err_)
 
-        if self.plot_phase_pholded_tran.isChecked() and fit.tra_doGP != True and fit.npl > 0:
- 
-            model_time_phase = np.array( (t_model - offset)%fit.P[ph_pl_ind]  )
-            sort2 = np.array(sorted(range(len(model_time_phase)), key=lambda k: model_time_phase[k])    )
-
-            t_model = model_time_phase[sort2] + tra_offset_xaxis
-            flux_model_ex    = flux_model_ex[sort2] 
-
-
-
 
         if fit.tra_doGP == True:
             y_model =  np.array(transit_results_all[6], dtype=float)   #fit.tra_gp_model_curve[0]
@@ -4712,6 +4737,29 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
         else:
             y_model = flux_model_ex 
             y_model_o_c = np.zeros(len(flux_model_ex))
+            
+            
+        if self.plot_phase_pholded_tran.isChecked() and fit.npl > 0:
+ 
+            model_time_phase = np.array( (t_model - offset)%fit.P[ph_pl_ind]  )
+            sort2 = np.array(sorted(range(len(model_time_phase)), key=lambda k: model_time_phase[k])    )
+
+            if self.extra_plot_Tra_phase_norm.isChecked():
+                model_time_phase = (model_time_phase/max(model_time_phase)) - 0.5
+                #time_phase = ((time_phase)/max(time_phase)) -0.5  
+
+            t_model = model_time_phase[sort2] + tra_offset_xaxis
+            flux_model_ex    = flux_model_ex[sort2] 
+            flux_model_ex_gp    = flux_model_ex_gp[sort2]
+            
+            y_model = flux_model_ex             
+            
+            if fit.tra_doGP == True: 
+                y_model = flux_model_ex #- flux_model_ex_gp
+                print("GP model was subtracted!!!")
+ 
+
+            
 
         if len(t_model) != 0:
 
@@ -4729,6 +4777,8 @@ period = %.2f [d], power = %.4f"""%(per_x[j],per_y[j])
 
             model_curve.setZValue(self.tra_model_z.value())
             model_curve_o_c.setZValue(self.tra_model_z.value())
+
+
 
         if self.trans_plot_cross_hair.isChecked():
 
@@ -13415,6 +13465,7 @@ Please install via 'pip install ttvfast'.
         
         ############### transit plotting controll ####################      
         self.plot_phase_pholded_tran.stateChanged.connect(self.update_transit_plots)
+        self.extra_plot_Tra_phase_norm.stateChanged.connect(self.update_transit_plots)
         self.tra_model_width.valueChanged.connect(self.update_transit_plots)
         self.tra_model_z.valueChanged.connect(self.update_transit_plots)
         self.use_rich_tra_model.stateChanged.connect(self.update_transit_plots)

@@ -58,7 +58,7 @@ class SuperSampler(Sampler):
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  method,
                  update_interval,
@@ -69,11 +69,12 @@ class SuperSampler(Sampler):
                  use_pool,
                  kwargs=None,
                  ncdim=0,
-                 blob=False):
+                 blob=False,
+                 logvol_init=0):
         # Initialize sampler.
         super().__init__(loglikelihood,
                          prior_transform,
-                         npdim,
+                         ndim,
                          live_points,
                          update_interval,
                          first_update,
@@ -82,7 +83,8 @@ class SuperSampler(Sampler):
                          pool,
                          use_pool,
                          ncdim=ncdim,
-                         blob=blob)
+                         blob=blob,
+                         logvol_init=logvol_init)
         # Initialize method to propose a new starting point.
         self._PROPOSE = {
             'unif': self.propose_unif,
@@ -293,7 +295,7 @@ class UnitCubeSampler(SuperSampler):
         Function transforming a sample from the a unit cube to the parameter
         space of interest according to the prior.
 
-    npdim : int
+    ndim : int
         Number of parameters accepted by `prior_transform`.
 
     live_points : list of 3 `~numpy.ndarray` each with shape (nlive, ndim)
@@ -337,7 +339,7 @@ class UnitCubeSampler(SuperSampler):
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  method,
                  update_interval,
@@ -348,12 +350,13 @@ class UnitCubeSampler(SuperSampler):
                  use_pool,
                  kwargs=None,
                  ncdim=0,
-                 blob=False):
+                 blob=False,
+                 logvol_init=0):
 
         # Initialize sampler.
         super().__init__(loglikelihood,
                          prior_transform,
-                         npdim,
+                         ndim,
                          live_points,
                          method,
                          update_interval,
@@ -364,12 +367,13 @@ class UnitCubeSampler(SuperSampler):
                          use_pool,
                          ncdim=ncdim,
                          blob=blob,
+                         logvol_init=logvol_init,
                          kwargs=kwargs or {})
 
         self.unitcube = UnitCube(self.ncdim)
         self.bounding = 'none'
 
-    def update(self):
+    def update(self, subset=slice(None)):
         """Update the unit cube bound."""
 
         return copy.deepcopy(self.unitcube)
@@ -379,10 +383,10 @@ class UnitCubeSampler(SuperSampler):
         within the unit cube."""
 
         u = self.unitcube.sample(rstate=self.rstate)
-        ax = np.identity(self.npdim)
-        if self.npdim != self.ncdim:
+        ax = np.identity(self.ndim)
+        if self.ndim != self.ncdim:
             u = np.concatenate(
-                [u, self.rstate.random(size=self.npdim - self.ncdim)])
+                [u, self.rstate.random(size=self.ndim - self.ncdim)])
 
         return u, ax
 
@@ -396,7 +400,7 @@ class UnitCubeSampler(SuperSampler):
         else:
             i = self.rstate.integers(self.nlive)
         u = self.live_u[i, :]
-        ax = np.identity(self.npdim)
+        ax = np.identity(self.ndim)
 
         return u, ax
 
@@ -416,7 +420,7 @@ class SingleEllipsoidSampler(SuperSampler):
         Function transforming a sample from the a unit cube to the parameter
         space of interest according to the prior.
 
-    npdim : int
+    ndim : int
         Number of parameters accepted by `prior_transform`.
 
     live_points : list of 3 `~numpy.ndarray` each with shape (nlive, ndim)
@@ -460,7 +464,7 @@ class SingleEllipsoidSampler(SuperSampler):
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  method,
                  update_interval,
@@ -471,12 +475,13 @@ class SingleEllipsoidSampler(SuperSampler):
                  use_pool,
                  kwargs=None,
                  blob=False,
+                 logvol_init=0,
                  ncdim=0):
 
         # Initialize sampler.
         super().__init__(loglikelihood,
                          prior_transform,
-                         npdim,
+                         ndim,
                          live_points,
                          method,
                          update_interval,
@@ -487,12 +492,17 @@ class SingleEllipsoidSampler(SuperSampler):
                          use_pool,
                          ncdim=ncdim,
                          blob=blob,
+                         logvol_init=logvol_init,
                          kwargs=kwargs or {})
 
-        self.ell = Ellipsoid(np.zeros(self.ncdim), np.identity(self.ncdim))
+        self.ell = Ellipsoid(
+            np.zeros(self.ncdim) + .5,
+            np.identity(self.ncdim) * self.ncdim / 4)
+        # this is ellipsoid in the center of the cube that contains
+        # the whole cube
         self.bounding = 'single'
 
-    def update(self):
+    def update(self, subset=slice(None)):
         """Update the bounding ellipsoid using the current set of
         live points."""
 
@@ -503,7 +513,7 @@ class SingleEllipsoidSampler(SuperSampler):
             pool = None
 
         # Update the ellipsoid.
-        self.ell.update(self.live_u[:, :self.ncdim],
+        self.ell.update(self.live_u[subset, :self.ncdim],
                         rstate=self.rstate,
                         bootstrap=self.bootstrap,
                         pool=pool)
@@ -517,7 +527,7 @@ class SingleEllipsoidSampler(SuperSampler):
         within the ellipsoid."""
 
         threshold_warning = 10000
-        if self.ncdim != self.npdim and self.nonbounded is not None:
+        if self.ncdim != self.ndim and self.nonbounded is not None:
             nonb = self.nonbounded[:self.ncdim]
         else:
             nonb = self.nonbounded
@@ -535,9 +545,9 @@ class SingleEllipsoidSampler(SuperSampler):
                 warnings.filterwarnings("once")
                 warnings.warn("Ellipsoid sampling is extremely inefficient")
 
-        if self.npdim != self.ncdim:
+        if self.ndim != self.ncdim:
             u = np.concatenate(
-                [u, self.rstate.random(size=self.npdim - self.ncdim)])
+                [u, self.rstate.random(size=self.ndim - self.ncdim)])
         return u, self.ell.axes
 
     def propose_live(self, *args):
@@ -551,10 +561,8 @@ class SingleEllipsoidSampler(SuperSampler):
         u = self.live_u[i, :]
 
         # Choose axes.
-        if self.sampling in ['rwalk', 'rslice']:
+        if self.sampling in ['rwalk', 'rslice', 'slice']:
             ax = self.ell.axes
-        elif self.sampling == 'slice':
-            ax = self.ell.paxes
         else:
             ax = np.identity(self.ncdim)
 
@@ -576,7 +584,7 @@ class MultiEllipsoidSampler(SuperSampler):
         Function transforming a sample from the a unit cube to the parameter
         space of interest according to the prior.
 
-    npdim : int
+    ndim : int
         Number of parameters accepted by `prior_transform`.
 
     live_points : list of 3 `~numpy.ndarray` each with shape (nlive, ndim)
@@ -620,7 +628,7 @@ class MultiEllipsoidSampler(SuperSampler):
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  method,
                  update_interval,
@@ -631,11 +639,12 @@ class MultiEllipsoidSampler(SuperSampler):
                  use_pool,
                  kwargs=None,
                  blob=False,
+                 logvol_init=0,
                  ncdim=0):
         # Initialize sampler.
         super().__init__(loglikelihood,
                          prior_transform,
-                         npdim,
+                         ndim,
                          live_points,
                          method,
                          update_interval,
@@ -646,13 +655,17 @@ class MultiEllipsoidSampler(SuperSampler):
                          use_pool,
                          ncdim=ncdim,
                          blob=blob,
+                         logvol_init=logvol_init,
                          kwargs=kwargs or {})
 
-        self.mell = MultiEllipsoid(ctrs=[np.zeros(self.ncdim)],
-                                   covs=[np.identity(self.ncdim)])
+        self.mell = MultiEllipsoid(
+            ctrs=[np.zeros(self.ncdim) + .5],
+            covs=[np.identity(self.ncdim) * self.ncdim / 4])
+        # this is ellipsoid in the center of the cube that contains
+        # the whole cube
         self.bounding = 'multi'
 
-    def update(self):
+    def update(self, subset=slice(None)):
         """Update the bounding ellipsoids using the current set of
         live points."""
 
@@ -663,7 +676,7 @@ class MultiEllipsoidSampler(SuperSampler):
             pool = None
 
         # Update the bounding ellipsoids.
-        self.mell.update(self.live_u[:, :self.ncdim],
+        self.mell.update(self.live_u[subset, :self.ncdim],
                          rstate=self.rstate,
                          bootstrap=self.bootstrap,
                          pool=pool)
@@ -678,7 +691,7 @@ class MultiEllipsoidSampler(SuperSampler):
 
         threshold_warning = 10000
 
-        if self.ncdim != self.npdim and self.nonbounded is not None:
+        if self.ncdim != self.ndim and self.nonbounded is not None:
             nonb = self.nonbounded[:self.ncdim]
         else:
             nonb = self.nonbounded
@@ -698,9 +711,9 @@ class MultiEllipsoidSampler(SuperSampler):
             with warnings.catch_warnings():
                 warnings.filterwarnings("once")
                 warnings.warn("Ellipsoid sampling is extremely inefficient")
-        if self.ncdim != self.npdim:
+        if self.ncdim != self.ndim:
             u = np.concatenate(
-                [u, self.rstate.random(size=self.npdim - self.ncdim)])
+                [u, self.rstate.random(size=self.ndim - self.ncdim)])
         return u, self.mell.ells[idx].axes
 
     def propose_live(self, *args):
@@ -719,12 +732,7 @@ class MultiEllipsoidSampler(SuperSampler):
         # Automatically trigger an update if we're not in any ellipsoid.
         if not self.mell.contains(u_fit):
             # Update the bounding ellipsoids.
-            bound = self.update()
-            if self.save_bounds:
-                self.bound.append(bound)
-            self.nbound += 1
-            self.since_update = 0
-
+            self.update_bound_if_needed(-np.inf, force=True)
             # Check for ellipsoid overlap (again).
             if not self.mell.contains(u_fit):
                 raise RuntimeError('Update of the ellipsoid failed')
@@ -739,12 +747,9 @@ class MultiEllipsoidSampler(SuperSampler):
             probs = np.exp(self.mell.logvols - self.mell.logvol_tot)
             ell_idx = rand_choice(probs, self.rstate)
             # Choose axes.
-            if self.sampling == 'slice':
-                ax = self.mell.ells[ell_idx].paxes
-            else:
-                ax = self.mell.ells[ell_idx].axes
+            ax = self.mell.ells[ell_idx].axes
         else:
-            ax = np.identity(self.npdim)
+            ax = np.identity(self.ndim)
 
         return u, ax
 
@@ -764,7 +769,7 @@ class RadFriendsSampler(SuperSampler):
         Function transforming a sample from the a unit cube to the parameter
         space of interest according to the prior.
 
-    npdim : int
+    ndim : int
         Number of parameters accepted by `prior_transform`.
 
     live_points : list of 3 `~numpy.ndarray` each with shape (nlive, ndim)
@@ -808,7 +813,7 @@ class RadFriendsSampler(SuperSampler):
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  method,
                  update_interval,
@@ -819,12 +824,13 @@ class RadFriendsSampler(SuperSampler):
                  use_pool,
                  kwargs=None,
                  blob=False,
+                 logvol_init=0,
                  ncdim=0):
 
         # Initialize sampler.
         super().__init__(loglikelihood,
                          prior_transform,
-                         npdim,
+                         ndim,
                          live_points,
                          method,
                          update_interval,
@@ -834,13 +840,14 @@ class RadFriendsSampler(SuperSampler):
                          pool,
                          use_pool,
                          ncdim=ncdim,
+                         logvol_init=logvol_init,
                          blob=blob,
                          kwargs=kwargs or {})
 
         self.radfriends = RadFriends(self.ncdim)
         self.bounding = 'balls'
 
-    def update(self):
+    def update(self, subset=slice(None)):
         """Update the N-sphere radii using the current set of live points."""
 
         # Check if we should use the provided pool for updating.
@@ -850,7 +857,7 @@ class RadFriendsSampler(SuperSampler):
             pool = None
 
         # Update the N-spheres.
-        self.radfriends.update(self.live_u[:, :self.ncdim],
+        self.radfriends.update(self.live_u[subset, :self.ncdim],
                                rstate=self.rstate,
                                bootstrap=self.bootstrap,
                                pool=pool)
@@ -882,7 +889,7 @@ class RadFriendsSampler(SuperSampler):
         ax = self.radfriends.axes
 
         u = np.concatenate(
-            [u, self.rstate.random(size=self.npdim - self.ncdim)])
+            [u, self.rstate.random(size=self.ndim - self.ncdim)])
         return u, ax
 
     def propose_live(self, *args):
@@ -916,7 +923,7 @@ class SupFriendsSampler(SuperSampler):
         Function transforming a sample from the a unit cube to the parameter
         space of interest according to the prior.
 
-    npdim : int
+    ndim : int
         Number of parameters accepted by `prior_transform`.
 
     live_points : list of 3 `~numpy.ndarray` each with shape (nlive, ndim)
@@ -960,7 +967,7 @@ class SupFriendsSampler(SuperSampler):
     def __init__(self,
                  loglikelihood,
                  prior_transform,
-                 npdim,
+                 ndim,
                  live_points,
                  method,
                  update_interval,
@@ -971,12 +978,13 @@ class SupFriendsSampler(SuperSampler):
                  use_pool,
                  kwargs=None,
                  blob=False,
+                 logvol_init=0,
                  ncdim=0):
 
         # Initialize sampler.
         super().__init__(loglikelihood,
                          prior_transform,
-                         npdim,
+                         ndim,
                          live_points,
                          method,
                          update_interval,
@@ -987,12 +995,13 @@ class SupFriendsSampler(SuperSampler):
                          use_pool,
                          ncdim=ncdim,
                          blob=blob,
+                         logvol_init=logvol_init,
                          kwargs=kwargs or {})
 
         self.supfriends = SupFriends(self.ncdim)
         self.bounding = 'cubes'
 
-    def update(self):
+    def update(self, subset=slice(None)):
         """Update the N-cube side-lengths using the current set of
         live points."""
 
@@ -1003,7 +1012,7 @@ class SupFriendsSampler(SuperSampler):
             pool = None
 
         # Update the N-cubes.
-        self.supfriends.update(self.live_u[:, :self.ncdim],
+        self.supfriends.update(self.live_u[subset, :self.ncdim],
                                rstate=self.rstate,
                                bootstrap=self.bootstrap,
                                pool=pool)
@@ -1033,9 +1042,9 @@ class SupFriendsSampler(SuperSampler):
 
         # Define the axes of our N-cube.
         ax = self.supfriends.axes
-        if self.npdim != self.ncdim:
+        if self.ndim != self.ncdim:
             u = np.concatenate(
-                [u, self.rstate.random(size=self.npdim - self.ncdim)])
+                [u, self.rstate.random(size=self.ndim - self.ncdim)])
         return u, ax
 
     def propose_live(self, *args):
