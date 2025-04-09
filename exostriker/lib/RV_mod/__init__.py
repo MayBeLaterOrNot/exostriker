@@ -2495,7 +2495,7 @@ def run_nestsamp(obj, **kwargs):
             maxiter = ns_maxiter, maxcall = ns_maxcall ) #dlogz=stop_crit,
             thread.close()
             thread.join()
-            #thread.clear()
+            thread.clear()
 
         else:
              sampler = dynesty.NestedSampler(partial_func, prior_transform, ndim, nlive=nwalkers, sample = dynesty_samp, bound = ns_bound)
@@ -2532,7 +2532,7 @@ def run_nestsamp(obj, **kwargs):
                     maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac})   #nlive_batch=1
                     threads_context.close()
                     threads_context.join()
-                    #threads_context.clear()
+                    threads_context.clear()
                                 
             else:
                 
@@ -2543,7 +2543,7 @@ def run_nestsamp(obj, **kwargs):
                 maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac})   #nlive_batch=1
                 thread.close()
                 thread.join()
-                #thread.clear()
+                thread.clear()
                
             
 
@@ -2555,7 +2555,7 @@ def run_nestsamp(obj, **kwargs):
         # just in case
         thread.close()
         thread.join()
-        #thread.clear()
+        thread.clear()
 
        # obj.dyn_res = sampler.results
 
