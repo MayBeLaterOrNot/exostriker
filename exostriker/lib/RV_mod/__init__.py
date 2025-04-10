@@ -30,20 +30,9 @@ from celerite import terms
 import dill
 dill.settings['fmode']
 
-import gc
-
-#try:
-#    import dynesty
-#    if float(dynesty.__version__[0:3])<=3.1: # a fix is needed.....
-#        import dynesty_2_0 as dynesty        
- 
-#except:
-#    print("dynesty not found, switching to the internally imported github version==2.0!")
-#    import dynesty_2_0 as dynesty
-#    import dynesty_patch
-#    dynesty.results =  dynesty_patch
-
+#import gc
 import dynesty_2_0 as dynesty
+#import dynesty
 import dynesty_patch
 dynesty.results =  dynesty_patch 
 
@@ -2441,14 +2430,14 @@ def run_nestsamp(obj, **kwargs):
     partial_func = FunctionWrapper(model_loglik, (mod, par, flags, npl, vel_files, tr_files, tr_model, tr_params, epoch, stmass, gps, tra_gps, rtg, mix_fit, opt) )
 
     #from multiprocessing import Pool, cpu_count
-   # from pathos.multiprocessing import ProcessingPool as Pool
-    from pathos.pools import ProcessPool as Pool
+    from pathos.multiprocessing import ProcessingPool as Pool
+    #from pathos.pools import ProcessPool as Pool
 #    from multiprocessing import Pool
 #    from contextlib import closing
 
     #import multiprocessing as mp
     #from multiprocessing import Pool
-
+   # from pathos.pools import ThreadPool as Pool
 
     dynesty_samp = obj.ns_samp_method
     print_progress = obj.ns_progress #std_output
@@ -2474,28 +2463,23 @@ def run_nestsamp(obj, **kwargs):
     #from multiprocessing import get_context
     #ctx = get_context("fork")
 
-    thread = Pool(ncpus=threads)#, context=ctx)
+    pool = Pool(ncpus=threads)#, context=ctx)
+    #thread = Pool(threads)#, context=ctx)
 
+    #pool = Pool(nodes=threads)
 
     if Dynamic_nest == False:
         print("'Static' Nest. Samp. is running, please wait...")
 
         if threads > 1:
-            #with closing(Pool(processes=threads)) as thread:
-            #    sampler = dynesty.NestedSampler(partial_func, prior_transform, ndim, nlive=nwalkers, pool = thread,
-            #                                    queue_size=threads, sample = dynesty_samp)
-
-            #    sampler.run_nested(print_progress=print_progress,dlogz=stop_crit) #dlogz=stop_crit,
-            #    thread.close()
-            #    thread.join()
-            #    thread.clear()
-            sampler = dynesty.NestedSampler(partial_func, prior_transform, ndim, nlive=nwalkers, pool = thread,
+ 
+            sampler = dynesty.NestedSampler(partial_func, prior_transform, ndim, nlive=nwalkers, pool = pool,
                                                 queue_size=threads, sample = dynesty_samp, bound = ns_bound)
             sampler.run_nested(print_progress=print_progress,dlogz=stop_crit, 
             maxiter = ns_maxiter, maxcall = ns_maxcall ) #dlogz=stop_crit,
-            thread.close()
-            thread.join()
-            thread.clear()
+            #pool.close()
+            #pool.join()
+            #pool.clear()
 
         else:
              sampler = dynesty.NestedSampler(partial_func, prior_transform, ndim, nlive=nwalkers, sample = dynesty_samp, bound = ns_bound)
@@ -2510,40 +2494,33 @@ def run_nestsamp(obj, **kwargs):
         print("'Dynamic' Nest. Samp. is running, please wait...")
 
         if threads > 1:
-#            with closing(Pool(processes=threads)) as thread:
-#                sampler = dynesty.DynamicNestedSampler(partial_func, prior_transform, ndim, pool = thread,
-#                                                       queue_size=threads, sample = dynesty_samp, bound='multi') # nlive=nwalkers,
-
-#                sampler.run_nested(print_progress=print_progress,dlogz_init=stop_crit,nlive_init=nwalkers) #nlive_init=nwalkers, , nlive_batch=1
-#                thread.close()
-#                thread.join()
-#                thread.clear()
+ 
  
             if obj.new_mp == True:
     
                 import contextlib
                 print("This is a test!!!!")
-                with contextlib.closing(thread) as threads_context:
+                with contextlib.closing(pool) as pool:
                     
-                    sampler = dynesty.DynamicNestedSampler(partial_func, prior_transform, ndim, pool = threads_context,
+                    sampler = dynesty.DynamicNestedSampler(partial_func, prior_transform, ndim, pool = pool,
                                                                queue_size=threads, sample = dynesty_samp, bound = ns_bound) # nlive=nwalkers,
             
                     sampler.run_nested(print_progress=print_progress,dlogz_init=stop_crit,nlive_init=nwalkers, 
                     maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac})   #nlive_batch=1
-                    threads_context.close()
-                    threads_context.join()
-                    threads_context.clear()
+                    #pool.close()
+                    #pool.join()
+                    #pool.clear()
                                 
             else:
                 
-                sampler = dynesty.DynamicNestedSampler(partial_func, prior_transform, ndim, pool = thread,
+                sampler = dynesty.DynamicNestedSampler(partial_func, prior_transform, ndim, pool = pool,
                                                        queue_size=threads, sample = dynesty_samp, bound = ns_bound) # nlive=nwalkers,
     
                 sampler.run_nested(print_progress=print_progress,dlogz_init=stop_crit,nlive_init=nwalkers, 
                 maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac})   #nlive_batch=1
-                thread.close()
-                thread.join()
-                thread.clear()
+                #pool.close()
+                #pool.join()
+                #pool.clear()
                
             
 
@@ -2553,9 +2530,9 @@ def run_nestsamp(obj, **kwargs):
             maxiter = ns_maxiter, maxcall = ns_maxcall,use_stop = ns_use_stop, wt_kwargs={'pfrac': ns_pfrac} ) 
 
         # just in case
-        thread.close()
-        thread.join()
-        thread.clear()
+        pool.close()
+        pool.join()
+        pool.clear()
 
        # obj.dyn_res = sampler.results
 
@@ -2842,8 +2819,8 @@ def run_mcmc(obj, **kwargs):
         initiate_tansit_gps(obj)
         tra_gps = obj.tra_gps
 
-    #from pathos.multiprocessing import ProcessingPool as Pool
-    from pathos.pools import ProcessPool as Pool
+    from pathos.multiprocessing import ProcessingPool as Pool
+    #from pathos.pools import ProcessPool as Pool
     #from pathos.threading import ThreadPool as Pool
     pool=Pool(ncpus=obj.mcmc_threads)
     #pool=Pool(processes=threads-1)
