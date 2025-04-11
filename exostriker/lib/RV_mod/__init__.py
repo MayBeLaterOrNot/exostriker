@@ -2874,7 +2874,7 @@ def run_mcmc(obj, **kwargs):
 
     pool.close()
     pool.join()
-    #pool.clear()
+    pool.clear()
 
  #  print("--- %s seconds ---" % (time.time() - start_time))
 
@@ -2978,8 +2978,6 @@ def run_mcmc(obj, **kwargs):
 
     return obj
 
-
-
  
 class FunctionWrapper(object):
     """
@@ -3047,13 +3045,11 @@ class signal_fit(object):
         self.fit_performed = False
         self.model_saved=False
         self.stat_saved=False
-
-        
+ 
         self.f_for_mcmc=[]
         self.par_for_mcmc=[]
         self.e_for_mcmc=[]
         self.b_for_mcmc=[]
-
 
         self.init_St_params()
         self.init_st_mass()
@@ -3080,7 +3076,6 @@ class signal_fit(object):
 
         self.init_pl_arb()
         self.init_orb_evol_arb()
- 
 
         self.type_fit = {"RV": True,"Transit": False,"TTV":False , "AST":False}
 
@@ -3089,8 +3084,7 @@ class signal_fit(object):
         self.copl_incl = False
         self.jit_flag = False
         self.rtg = [True,False,False,False]
-        self.link_RV_GP = [False,False,False,False,False,False]
-                           
+        self.link_RV_GP = [False,False,False,False,False,False]                     
                            
         self.ttv_data_sets = {k: [] for k in range(10)}
         self.ast_data_sets = {k: [] for k in range(10)}
@@ -3101,8 +3095,7 @@ class signal_fit(object):
         self.act_data_sets_init = {k: [] for k in range(60)}
         self.tra_data_sets_init = {k: [] for k in range(60)}
         self.rv_data_sets_init  = {k: [] for k in range(60)}
-
- 
+        
         # in this case we need to create a new kernel, but we will only give it this information which is needed for plotting
 
         self.fit_results = dill.copy(Rvfit())
@@ -4164,8 +4157,6 @@ class signal_fit(object):
         #self.header = hipp_header
 
 
-
- 
         try:
         
             ast_BJD_        = np.genfromtxt("%s"%(path),skip_header=0, unpack=True,skip_footer=0, usecols = [0])
@@ -4345,8 +4336,7 @@ class signal_fit(object):
         if index != None and int(index) in pl_ind:
             ind = index
         else:
-            ind = self.npl
-        
+            ind = self.npl       
     
         self.P[ind] = P
         self.K[ind] = K
@@ -4355,7 +4345,6 @@ class signal_fit(object):
         self.M0[ind] = M0
         self.i[ind] = i
         self.Node[ind] = cap
-
 
         self.P_use[ind] = useP
         self.K_use[ind] = useK
@@ -4366,7 +4355,6 @@ class signal_fit(object):
         self.Node_use[ind] = usecap
 
         self.use_planet[ind] = 1
-
 
         self.npl=self.npl+1
         return
